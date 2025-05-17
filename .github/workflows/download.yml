@@ -1,0 +1,26 @@
+name: Ingest & Analyze CAISO Queue
+on:
+  push:
+    branches: [ main ]
+    paths: ['raw/**','scripts/**','*.py','Dockerfile','Pipfile']
+  schedule:
+    - cron: '0 10 * * 1'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    container:
+      image: caiso-queue:latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build Docker image
+        run: docker build -t caiso-queue:latest .
+      - name: Run parsing & analysis
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
+        run: |
+          python parse_queue.py
+          python analyze_queue.py

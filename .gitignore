@@ -1,0 +1,7 @@
+/raw/
+/data/
+/reports/
+*.db
+__pycache__/
+*.pyc
+*.env

@@ -1,0 +1,12 @@
+name: Cleanup Raw Files
+on:
+  schedule:
+    - cron: '0 10 * * 1'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Remove files older than 52 weeks
+        run: python scripts/cleanup_raw.py
