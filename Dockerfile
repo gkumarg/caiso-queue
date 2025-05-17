@@ -11,7 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY scripts/ ./scripts/
 
 # Copy data directories
-COPY raw/ data/ reports/ ./
+COPY raw/ ./raw/
+COPY data/ ./data/
+COPY reports/ ./reports/
 
 # Default command: run the parser (which also invokes analysis via workflows)
 ENTRYPOINT ["python", "scripts/parse_queue.py"]
