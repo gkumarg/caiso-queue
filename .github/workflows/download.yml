@@ -9,12 +9,12 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    container:
-      image: caiso-queue:latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+
       - name: Build Docker image
         run: docker build -t caiso-queue:latest .
+
       - name: Run parsing & analysis
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -22,5 +22,10 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
         run: |
-          python parse_queue.py
-          python analyze_queue.py
+          docker run --rm \
+            -e SMTP_HOST \
+            -e SMTP_USER \
+            -e SMTP_PASS \
+            -e NOTIFICATION_EMAIL \
+            caiso-queue:latest \
+            sh -c "python scripts/parse_queue.py && python scripts/analyze_queue.py"
