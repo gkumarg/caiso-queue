@@ -1,7 +1,7 @@
 name: Ingest & Analyze CAISO Queue
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths: ['raw/**','scripts/**','*.py','Dockerfile','Pipfile']
   schedule:
     - cron: '0 10 * * 1'
