@@ -1,6 +1,10 @@
-/raw/
-/data/
-/reports/
+# Ignore contents but keep directories with .gitkeep
+/raw/*
+!/raw/.gitkeep
+/data/*
+!/data/.gitkeep
+/reports/*
+!/reports/.gitkeep
 *.db
 __pycache__/
 *.pyc
