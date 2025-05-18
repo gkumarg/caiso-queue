@@ -81,6 +81,37 @@ def average_lead_time(conn):
     avg = df['lead_time'].mean()
     pd.DataFrame([{'average_lead_time_days': avg}]).to_csv('reports/average_lead_time.csv', index=False)
 
+# 7: Top 10 projects by Net MWs to Grid
+def top_projects_by_net_mw(conn):
+    """
+    This KPI identifies the largest generation projects in the queue based on 
+    their net MW contribution to the grid. It highlights major upcoming capacity
+    additions and their locations, which is valuable for:
+    - Transmission planning
+    - Market forecasting
+    - Resource adequacy assessments
+    - Regional capacity projections
+    """
+    df = pd.read_sql(
+        """
+        SELECT 
+            `Unnamed: 0_level_0 Project Name` AS project_name,
+            `Unnamed: 1_level_0 Queue Position` AS queue_position,
+            `MWs Net MWs to Grid` AS net_mw,
+            fuel_types,
+            `Unnamed: 4_level_0 Application Status` AS status,
+            `Location County` AS county,
+            `Location State` AS state
+        FROM grid_generation_queue
+        WHERE `MWs Net MWs to Grid` IS NOT NULL
+        GROUP BY `Unnamed: 0_level_0 Project Name`, `Unnamed: 1_level_0 Queue Position`
+        ORDER BY MAX(`MWs Net MWs to Grid`) DESC
+        LIMIT 10
+        """, conn
+    )
+    df.to_csv('reports/top_projects_by_net_mw.csv', index=False)
+    print(f"Generated top projects by net MW report with {len(df)} unique projects")
+
 # Main analysis
 if __name__ == '__main__':
     conn = sqlite3.connect(DB_FILE)
@@ -90,4 +121,5 @@ if __name__ == '__main__':
     weekly_queue_growth(conn)
     cancellation_rate(conn)
     average_lead_time(conn)
+    top_projects_by_net_mw(conn)  # Add the new KPI to the execution
     conn.close()
