@@ -1,19 +1,42 @@
 # CAISO Queue ETL & Analysis
 
+This project automates the collection, processing, and analysis of CAISO's interconnection queue data.
+
+## Features
+
+- Automated weekly data collection from CAISO website
+- Historical data tracking with dated snapshots
+- Comprehensive analysis and KPI generation
+- GitHub Actions automation for consistent data updates
+- Email notifications for pipeline status
+
 ## Setup
 
-1. Ensure Docker & pipenv are installed.
-2. Copy your `publicqueuereport.xlsx` into `raw/`.
+### Local Development
+
+1. Ensure Docker & pipenv are installed
+2. Clone the repository
 3. Build: `docker build -t caiso-queue:latest .`
-4. Run ingestion & analysis:   
+4. Run the complete pipeline:   
    ```bash
    docker run --rm \
+     -v %CD%/reports:/app/reports \
+     -v %CD%/raw:/app/raw \
      -e SMTP_HOST=... \
      -e SMTP_USER=... \
      -e SMTP_PASS=... \
      -e NOTIFICATION_EMAIL=... \
-     caiso-queue:latest
+     caiso-queue:latest \
+     sh -c "python scripts/run_pipeline.py && python scripts/analyze_queue.py && python scripts/cleanup_raw.py"
    ```
+
+### Automated Updates
+
+The project includes a GitHub Actions workflow that:
+1. Downloads the latest CAISO queue report every Monday
+2. Processes and analyzes the data
+3. Generates updated reports
+4. Commits changes back to the repository
 
 ## Directory Structure
 
@@ -45,36 +68,66 @@ The analysis generates the following KPIs in the `reports/` directory:
    The 10 largest projects by net MW contribution to the grid, including project name,
    location, fuel type, and status.
 
-## Testing Offline
+## Pipeline Components
 
-- Place sample XLSX in `raw/`.
-- Build & run container; verify `data/caiso_queue.db` and CSVs in `reports/`.
+1. **Data Collection** (`data_collection.py`)
+   - Downloads the latest queue report from CAISO website
+   - Saves with date suffix for historical tracking
+   - Maintains a standard filename for compatibility
 
-## Storing Secrets
+2. **Data Processing** (`parse_queue.py`)
+   - Parses multi-sheet Excel workbook
+   - Handles complex header structures
+   - Loads data into SQLite database
 
-**GitHub Actions**  
-1. Go to your repository on GitHub.  
-2. Navigate to Settings → Secrets and variables → Actions.  
-3. Click "New repository secret" and add the following keys with your values:  
-   - `SMTP_HOST`  
-   - `SMTP_USER`  
-   - `SMTP_PASS`  
-   - `NOTIFICATION_EMAIL`  
-4. These will be automatically injected into your workflows via `${{ secrets.SMTP_HOST }}`, etc.
+3. **Analysis** (`analyze_queue.py`)
+   - Generates standardized reports and KPIs
+   - Outputs CSV files for further analysis
+   - Tracks changes over time
 
-**Local Testing**  
-- Create a `.env` file in your project root containing:  
-  ```ini
-  SMTP_HOST=smtp.example.com
-  SMTP_USER=your_user
-  SMTP_PASS=your_pass
-  NOTIFICATION_EMAIL=you@example.com
-  ```
-- Install `python-dotenv` or use your shell to load env vars:  
-  ```bash
-  export $(grep -v '^#' .env | xargs)
-  ```
-- Then run Docker with `--env-file .env`:  
-  ```bash
-  docker run --rm --env-file .env caiso-queue:latest
-  ```
+4. **Maintenance** (`cleanup_raw.py`)
+   - Manages historical data retention
+   - Cleans up old raw files
+   - Maintains optimal storage usage
+
+## Environment Setup
+
+### GitHub Actions Setup
+
+1. Go to your repository on GitHub
+2. Navigate to Settings → Secrets and variables → Actions
+3. Add the following secrets:
+   - `SMTP_HOST`: Your SMTP server address
+   - `SMTP_USER`: SMTP username
+   - `SMTP_PASS`: SMTP password
+   - `NOTIFICATION_EMAIL`: Notification recipient
+
+### Local Development
+
+1. Create a `.env` file:
+   ```ini
+   SMTP_HOST=smtp.example.com
+   SMTP_USER=your_user
+   SMTP_PASS=your_pass
+   NOTIFICATION_EMAIL=you@example.com
+   ```
+
+2. Run with environment file:
+   ```cmd
+   docker run --rm ^
+     --env-file .env ^
+     -v %CD%/reports:/app/reports ^
+     -v %CD%/raw:/app/raw ^
+     caiso-queue:latest ^
+     sh -c "python scripts/run_pipeline.py"
+   ```
+
+## Testing
+
+1. Place a sample XLSX file in `raw/` directory
+2. Run the pipeline locally to verify:
+   - Data collection and parsing
+   - Report generation
+   - Database updates
+3. Check `data/caiso_queue.db` for processed data
+4. Verify reports in `reports/` directory

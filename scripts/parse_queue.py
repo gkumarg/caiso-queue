@@ -60,6 +60,9 @@ def main():
     }
     conn = sqlite3.connect(DB_FILE)
     
+    # Get today's date for duplicate checking
+    today = pd.to_datetime('today').date()
+    
     # Process each sheet
     for table, sheet_name in sheets.items():
         try:
@@ -72,6 +75,44 @@ def main():
             )
             print(f"Sheet {sheet_name} loaded with {len(df)} rows")
             df = parse_sheet(df)
+            
+            # Filter out records with empty Queue Position
+            queue_pos_col = 'Unnamed: 1_level_0 Queue Position'
+            if queue_pos_col in df.columns:
+                before_count = len(df)
+                # Drop rows where Queue Position is null, empty string, or whitespace only
+                df = df.dropna(subset=[queue_pos_col])
+                # Also drop rows where Queue Position is just whitespace
+                df = df[df[queue_pos_col].astype(str).str.strip() != '']
+                dropped_count = before_count - len(df)
+                if dropped_count > 0:
+                    print(f"Dropped {dropped_count} rows with empty Queue Position values")
+                print(f"Remaining rows after filtering: {len(df)}")
+            
+            # Check if table exists
+            table_exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,)
+            ).fetchone() is not None
+            
+            if table_exists:
+                # Check for existing data with today's ingestion_date
+                try:
+                    existing_count = conn.execute(
+                                                f"SELECT COUNT(*) FROM {table} WHERE ingestion_date = ?", 
+                        (today.strftime('%Y-%m-%d'),)
+                    ).fetchone()[0]
+                    
+                    if existing_count > 0:
+                        print(f"Found {existing_count} existing records for today in {table}, removing them first")
+                        conn.execute(f"DELETE FROM {table} WHERE ingestion_date = ?", (today.strftime('%Y-%m-%d'),))
+                        conn.commit()
+                except Exception as e:
+                    # Table might exist but not have ingestion_date column
+                    print(f"Could not check for duplicates in {table}: {str(e)}")
+            else:
+                print(f"Table {table} does not exist yet, will be created")
+            
             print(f"Parsed data for {table}, writing to database")
             df.to_sql(table, conn, if_exists='append', index=False)
             print(f"Successfully added {len(df)} rows to {table}")
@@ -95,8 +136,15 @@ def main():
                         'ON grid_generation_queue(`Unnamed: 1_level_0 Queue Position`)'
                     )
                     print("Created index on Queue Position")
+                    
+                    # Create index on ingestion_date for faster duplicate checking
+                    conn.execute(
+                        'CREATE INDEX IF NOT EXISTS idx_ingestion_date '
+                        'ON grid_generation_queue(ingestion_date)'
+                    )
+                    print("Created index on ingestion_date")
                 except Exception as e:
-                    print(f"Error creating index on Queue Position: {str(e)}")
+                    print(f"Error creating indexes: {str(e)}")
         else:
             print("Skipping index creation - grid_generation_queue table does not exist")
     except Exception as e:

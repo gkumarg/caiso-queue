@@ -7,13 +7,20 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create directories for mounted volumes
+RUN mkdir -p /app/raw /app/data /app/reports
+
 # Copy source code
 COPY scripts/ ./scripts/
 
-# Copy data directories
-COPY raw/ ./raw/
-COPY data/ ./data/
-COPY reports/ ./reports/
+# Environment variables
+ENV SMTP_HOST=
+ENV SMTP_USER=
+ENV SMTP_PASS=
+ENV NOTIFICATION_EMAIL=
 
-# Default command: run the parser (which also invokes analysis via workflows)
-ENTRYPOINT ["python", "scripts/parse_queue.py"]
+# Volume configuration
+VOLUME ["/app/raw", "/app/data", "/app/reports"]
+
+# Default command: run the complete pipeline
+ENTRYPOINT ["python", "scripts/run_pipeline.py"]

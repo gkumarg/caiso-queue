@@ -1,21 +1,26 @@
-name: Ingest & Analyze CAISO Queue
+name: CAISO Queue Pipeline
 on:
   push:
     branches: [ master ]
     paths: ['raw/**','scripts/**','*.py','Dockerfile','Pipfile']
   schedule:
-    - cron: '0 10 * * 1'
+    - cron: '0 10 * * 1'  # Run at 10:00 UTC every Monday
+  workflow_dispatch:  # Allow manual triggers
 
 jobs:
-  run:
+  pipeline:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed for pushing changes
     steps:
       - uses: actions/checkout@v3
-
+        with:
+          fetch-depth: 0  # Fetch all history for git operations
+      
       - name: Build Docker image
         run: docker build -t caiso-queue:latest .
-
-      - name: Run parsing & analysis
+      
+      - name: Run complete pipeline
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
@@ -27,5 +32,15 @@ jobs:
             -e SMTP_USER \
             -e SMTP_PASS \
             -e NOTIFICATION_EMAIL \
-            caiso-queue:latest \
-            sh -c "python scripts/parse_queue.py && python scripts/analyze_queue.py"
+            -v ${PWD}/data:/app/data \
+            -v ${PWD}/reports:/app/reports \
+            -v ${PWD}/raw:/app/raw \
+            caiso-queue:latest
+      
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add raw/ data/ reports/
+          git commit -m "Update CAISO Queue data and reports $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push

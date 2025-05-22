@@ -1,12 +1,31 @@
 name: Cleanup Raw Files
 on:
   schedule:
-    - cron: '0 10 * * 1'
+    - cron: '30 10 * * 1'  # Run 30 minutes after the main pipeline
+  workflow_dispatch:  # Allow manual triggers
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed for pushing changes
     steps:
-      - uses: actions/checkout@v2
-      - name: Remove files older than 52 weeks
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for git operations
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Run cleanup script
         run: python scripts/cleanup_raw.py
+      
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add raw/
+          git commit -m "Cleanup old raw files [skip ci]" || echo "No changes to commit"
+          git push
