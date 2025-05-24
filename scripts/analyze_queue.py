@@ -124,18 +124,25 @@ def cancellation_rate(conn):
     - Potential concerns with the interconnection process that may need reform
     - Resource adequacy planning reliability (accounting for project attrition)
     """
-    # Get total MW from active projects
-    total = pd.read_sql(
+    # Get active MW from active projects
+    active = pd.read_sql(
         "SELECT SUM(`MWs MW-1`) AS total_mw FROM grid_generation_queue", 
         conn
     ).iloc[0,0] or 0
     
+    # Get total MW from active projects
+    completed = pd.read_sql(
+        "SELECT SUM(`MWs MW-1`) AS total_mw FROM grid_generation_queue", 
+        conn
+    ).iloc[0,0] or 0
+
     # Get total MW from withdrawn projects
     withdrawn = pd.read_sql(
         "SELECT SUM(`MWs MW-1`) AS withdrawn_mw FROM withdrawn_projects", 
         conn
     ).iloc[0,0] or 0
     
+    total = active + completed + withdrawn
     rate = withdrawn / total if total else None
     pd.DataFrame([{'cancellation_rate': rate}]).to_csv('reports/cancellation_rate.csv', index=False)
     print(f"Generated cancellation rate report: {rate:.2%}" if rate else "Generated cancellation rate report: N/A")
