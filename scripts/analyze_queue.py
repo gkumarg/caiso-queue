@@ -1,3 +1,6 @@
+"""
+Analysis script for CAISO queue data using simplified column names
+"""
 import pandas as pd
 import sqlite3
 import os
@@ -11,17 +14,11 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 # 1: Capacity by fuel types
 def capacity_by_fuel(conn):
     """
-    This KPI analyzes the total capacity (in MW) by different fuel types 
-    in the generation queue. It helps understand the distribution of renewable
-    and conventional energy sources, which is valuable for:
-    - Tracking renewable energy growth trends
-    - Identifying dominant generation technologies
-    - Supporting policy analysis and investment planning
-    - Monitoring progress toward clean energy goals
+    Analyze total capacity by different fuel types in the generation queue
     """
     df = pd.read_sql(
         """
-        SELECT fuel_types AS fuel, SUM(`MWs MW-1`) AS total_mw
+        SELECT fuel_types AS fuel, SUM(mw_1) AS total_mw
         FROM grid_generation_queue
         GROUP BY fuel_types
         """, conn
@@ -32,20 +29,14 @@ def capacity_by_fuel(conn):
 # 2: Project count & capacity by status
 def project_count_by_status(conn):
     """
-    This KPI provides an overview of projects by their status (Active, Completed, 
-    or Withdrawn) along with their total count and MW capacity. It helps track the 
-    progression of projects through the interconnection queue, which is useful for:
-    - Evaluating the overall health of the queue
-    - Assessing project completion and withdrawal rates
-    - Forecasting future grid capacity additions
-    - Planning for transmission needs based on project status
+    Provide overview of projects by status (Active, Completed, Withdrawn)
     """
     df = pd.read_sql(
         """
         SELECT 
             'Active' as status,
             COUNT(*) AS project_count,
-            SUM(`MWs MW-1`) AS total_mw
+            SUM(mw_1) AS total_mw
         FROM grid_generation_queue
         
         UNION ALL
@@ -53,7 +44,7 @@ def project_count_by_status(conn):
         SELECT 
             'Completed' as status,
             COUNT(*) AS project_count,
-            SUM(`MWs MW-1`) AS total_mw
+            SUM(mw_1) AS total_mw
         FROM completed_projects
         
         UNION ALL
@@ -61,7 +52,7 @@ def project_count_by_status(conn):
         SELECT 
             'Withdrawn' as status,
             COUNT(*) AS project_count,
-            SUM(`MWs MW-1`) AS total_mw
+            SUM(mw_1) AS total_mw
         FROM withdrawn_projects
         """, conn
     )
@@ -71,19 +62,13 @@ def project_count_by_status(conn):
 # 3: Top 5 ISO Zones by active capacity
 def top5_iso_zones(conn):
     """
-    This KPI identifies the top 5 ISO regions with the highest active generation 
-    capacity in the queue. This geographical distribution analysis is crucial for:
-    - Identifying regions with high development activity
-    - Anticipating transmission congestion areas
-    - Supporting locational investment decisions
-    - Highlighting areas with potential reliability concerns
-    - Informing regional economic impact assessments
+    Identify top 5 ISO regions with the highest active generation capacity
     """
     df = pd.read_sql(
         """
-        SELECT `Point of Interconnection PTO Study Region` AS iso_zone, SUM(`MWs MW-1`) AS total_mw
-        FROM grid_generation_queue  -- This table only contains active projects
-        GROUP BY `Point of Interconnection PTO Study Region`
+        SELECT pto_study_region AS iso_zone, SUM(mw_1) AS total_mw
+        FROM grid_generation_queue
+        GROUP BY pto_study_region
         ORDER BY total_mw DESC
         LIMIT 5
         """, conn
@@ -91,45 +76,26 @@ def top5_iso_zones(conn):
     df.to_csv('reports/top5_iso_zones.csv', index=False)
     print(f"Generated top 5 ISO zones report with the highest capacity regions")
 
-# 4: TODO Annual project status by fuel type
-def annual_project_status(conn):
-    """
-    This KPI tracks the number of projects added, withdrawn, and completed by year,
-    with additional breakdown by primary fuel type. This annual analysis provides:
-    - Year-over-year trends in project development activity
-    - Technology adoption patterns over time
-    - Comparative analysis of project success rates by fuel type
-    - Long-term market evolution insights for generation technologies
-    - Historical context for current interconnection patterns
-    """
-    pass
-
-# 5: Cancellation rate
+# 4: Cancellation rate
 def cancellation_rate(conn):
     """
-    This KPI calculates the ratio of withdrawn project capacity to total capacity
-    in the interconnection queue. This metric is a key indicator of:
-    - Project viability and development risk
-    - Market barriers and friction points in the interconnection process
-    - Efficiency of the queue management system
-    - Potential concerns with the interconnection process that may need reform
-    - Resource adequacy planning reliability (accounting for project attrition)
+    Calculate ratio of withdrawn project capacity to total capacity
     """
     # Get active MW from active projects
     active = pd.read_sql(
-        "SELECT SUM(`MWs MW-1`) AS total_mw FROM grid_generation_queue", 
+        "SELECT SUM(mw_1) AS total_mw FROM grid_generation_queue", 
         conn
     ).iloc[0,0] or 0
     
     # Get completed MW from completed projects
     completed = pd.read_sql(
-        "SELECT SUM(`MWs MW-1`) AS total_mw FROM completed_projects", 
+        "SELECT SUM(mw_1) AS total_mw FROM completed_projects", 
         conn
     ).iloc[0,0] or 0
 
     # Get total MW from withdrawn projects
     withdrawn = pd.read_sql(
-        "SELECT SUM(`MWs MW-1`) AS withdrawn_mw FROM withdrawn_projects", 
+        "SELECT SUM(mw_1) AS withdrawn_mw FROM withdrawn_projects", 
         conn
     ).iloc[0,0] or 0
     
@@ -138,24 +104,17 @@ def cancellation_rate(conn):
     pd.DataFrame([{'cancellation_rate': rate}]).to_csv('reports/cancellation_rate.csv', index=False)
     print(f"Generated cancellation rate report: {rate:.2%}" if rate else "Generated cancellation rate report: N/A")
 
-# 6: Average lead time (days)
+# 5: Average lead time (days)
 def average_lead_time(conn):
     """
-    This KPI measures the average number of days between when an interconnection 
-    request is received and when it is assigned a queue position. This lead time 
-    analysis provides insights into:
-    - Processing efficiency of the ISO's interconnection procedures
-    - Administrative bottlenecks in the application review process
-    - Trends in application processing times 
-    - Predictability of queue position assignment for developers
-    - Overall health of the interconnection request system
+    Measure average days between interconnection request receipt and queue position assignment
     """
     df = pd.read_sql(
-        "SELECT `Unnamed: 3_level_0 Queue Date` AS Queue_Date, "
-        "`Unnamed: 2_level_0 Interconnection Request\nReceive Date` AS Request_Received_Date "
+        "SELECT queue_date AS Queue_Date, "
+        "request_receive_date AS Request_Received_Date "
         "FROM grid_generation_queue "
-        "WHERE `Unnamed: 3_level_0 Queue Date` IS NOT NULL AND "
-        "`Unnamed: 2_level_0 Interconnection Request\nReceive Date` IS NOT NULL", conn,
+        "WHERE queue_date IS NOT NULL AND "
+        "request_receive_date IS NOT NULL", conn,
         parse_dates=['Queue_Date','Request_Received_Date']
     )
     df['lead_time'] = (df['Queue_Date'] - df['Request_Received_Date']).dt.days
@@ -163,123 +122,56 @@ def average_lead_time(conn):
     pd.DataFrame([{'average_lead_time_days': avg}]).to_csv('reports/average_lead_time.csv', index=False)
     print(f"Generated average lead time report: {avg:.1f} days based on {len(df)} projects")
 
-# 7: Top 10 projects by Net MWs to Grid
+# 6: Top 10 projects by Net MWs to Grid
 def top_projects_by_net_mw(conn):
     """
-    This KPI identifies the largest generation projects in the queue based on 
-    their net MW contribution to the grid. It highlights major upcoming capacity
-    additions and their locations, which is valuable for:
-    - Transmission planning
-    - Market forecasting
-    - Resource adequacy assessments
-    - Regional capacity projections
+    Identify the largest generation projects based on net MW contribution
     """    
     df = pd.read_sql(
         """
         SELECT 
-            `Unnamed: 0_level_0 Project Name` AS project_name,
-            `Unnamed: 1_level_0 Queue Position` AS queue_position,
-            `MWs Net MWs to Grid` AS net_mw,
+            project_name,
+            queue_position,
+            net_mw,
             fuel_types,
-            'Active' AS status,  -- All projects in grid_generation_queue are active
-            `Location County` AS county,
-            `Location State` AS state
+            'Active' AS status,
+            county,
+            state
         FROM grid_generation_queue
-        WHERE `MWs Net MWs to Grid` IS NOT NULL
-        GROUP BY `Unnamed: 0_level_0 Project Name`, `Unnamed: 1_level_0 Queue Position`
-        ORDER BY MAX(`MWs Net MWs to Grid`) DESC
-        LIMIT 10        """, conn
+        WHERE net_mw IS NOT NULL
+        GROUP BY project_name, queue_position
+        ORDER BY MAX(net_mw) DESC
+        LIMIT 10
+        """, conn
     )
     df.to_csv('reports/top_projects_by_net_mw.csv', index=False)
     print(f"Generated top projects by net MW report with {len(df)} unique projects")
 
-# 8: Project timeline delay analysis
+# 7: Project timeline delay analysis
 def timeline_delay_analysis(conn):
     """
-    This KPI measures the difference in days between the originally proposed 
-    online date and the current online date for generation projects. This delay 
-    analysis provides critical insights into:
-    - Project development timeline reliability
-    - Systematic delays in the interconnection process
-    - Risk factors for project timeline extensions
-    - Potential impacts on resource planning and reliability
-    - Trends in project development timelines by technology and region
+    Measure difference between originally proposed and current online dates
     """
-    # First, query the database to get all columns to find the exact names of date columns
-    columns_query = pd.read_sql("PRAGMA table_info(grid_generation_queue)", conn)
-    
-    # Find columns that might contain the proposed and current online date information
-    proposed_col = None
-    current_col = None
-    
-    for col in columns_query['name']:
-        if 'proposed' in col.lower() and 'on-line' in col.lower():
-            proposed_col = col
-        if 'current' in col.lower() and 'on-line' in col.lower():
-            current_col = col
-    
-    if not proposed_col or not current_col:
-        print("WARNING: Could not find proposed or current online date columns")
-        proposed_col = "Point of Interconnection Proposed On-line Date"
-        current_col = "Point of Interconnection Current On-line Date"
-        print(f"Using default column names: \n - {proposed_col}\n - {current_col}")
-    else:
-        print(f"Found date columns: \n - {proposed_col}\n - {current_col}")
-    
-    # Construct and execute the query with the found column names
-    query = f"""
+    # Using the renamed columns directly now
+    query = """
     SELECT
-        `Unnamed: 0_level_0 Project Name` AS project_name,
-        `Unnamed: 1_level_0 Queue Position` AS queue_position,
-        `{proposed_col}` AS proposed_online_date,
-        `{current_col}` AS current_online_date,
+        project_name,
+        queue_position,
+        proposed_online_date,
+        current_online_date,
         fuel_types
     FROM grid_generation_queue
-    WHERE `{proposed_col}` IS NOT NULL
-    AND `{current_col}` IS NOT NULL
+    WHERE proposed_online_date IS NOT NULL
+    AND current_online_date IS NOT NULL
     """
     
     try:
         df = pd.read_sql(query, conn, parse_dates=['proposed_online_date', 'current_online_date'])
+        print(f"Retrieved {len(df)} projects with timeline data")
     except Exception as e:
         print(f"Error executing timeline delay query: {str(e)}")
-        print("Attempting alternative approach...")
-        
-        # Get all data and process in pandas
-        df = pd.read_sql("SELECT * FROM grid_generation_queue", conn)
-        
-        # Look for date columns in the dataframe
-        date_cols = [col for col in df.columns if ('proposed' in col.lower() and 'on-line' in col.lower()) 
-                     or ('current' in col.lower() and 'on-line' in col.lower())]
-        
-        if len(date_cols) >= 2:
-            proposed_cols = [col for col in date_cols if 'proposed' in col.lower()]
-            current_cols = [col for col in date_cols if 'current' in col.lower()]
+        return
             
-            if proposed_cols and current_cols:
-                df = df[[
-                    'Unnamed: 0_level_0 Project Name', 
-                    'Unnamed: 1_level_0 Queue Position',
-                    proposed_cols[0], 
-                    current_cols[0], 
-                    'fuel_types'
-                ]].copy()
-                
-                df.columns = ['project_name', 'queue_position', 'proposed_online_date', 
-                             'current_online_date', 'fuel_types']
-                
-                # Convert date columns
-                df['proposed_online_date'] = pd.to_datetime(df['proposed_online_date'], errors='coerce')
-                df['current_online_date'] = pd.to_datetime(df['current_online_date'], errors='coerce')
-                
-                # Filter for non-null dates
-                df = df.dropna(subset=['proposed_online_date', 'current_online_date'])
-            else:
-                print("Could not identify proposed and current date columns")
-                return
-        else:
-            print("Could not find date columns for analysis")
-            return    
     # Calculate the difference in days between proposed and current online dates
     if len(df) == 0:
         print("No data available for timeline delay analysis")
@@ -323,19 +215,162 @@ def timeline_delay_analysis(conn):
     print(f"  - Projects accelerated: {delay_stats['negative_delay_count']}")
     print(f"  - Projects on schedule: {delay_stats['no_change_count']}")
 
+# Helper function to validate data quality
+def validate_data_quality(conn):
+    """
+    Check for data quality issues before running analyses
+    """
+    validation_issues = 0
+    
+    print("\n=== Data Quality Validation ===")
+    
+    # Check for all main tables
+    required_tables = ['grid_generation_queue', 'completed_projects', 'withdrawn_projects']
+    existing_tables = pd.read_sql(
+        "SELECT name FROM sqlite_master WHERE type='table'", 
+        conn
+    )['name'].tolist()
+    
+    for table in required_tables:
+        if table not in existing_tables:
+            print(f"ISSUE: Required table '{table}' is missing")
+            validation_issues += 1
+      # For each existing table, check for key columns
+    for table in [t for t in required_tables if t in existing_tables]:
+        try:
+            # Base key columns that should be present in all tables
+            key_columns = ['queue_position', 'ingestion_date', 'mw_1']
+            
+            # For withdrawn_projects, the project name column might have a different name
+            if table == 'withdrawn_projects':
+                project_name_cols = ['project_name', 'Unnamed: 0_level_0 Project Name - Confidential']
+            else:
+                project_name_cols = ['project_name']
+                
+            cols = pd.read_sql(f"PRAGMA table_info({table})", conn)['name'].tolist()
+            
+            # Check for standard columns
+            for col in key_columns:
+                if col not in cols:
+                    print(f"ISSUE: Key column '{col}' missing from {table}")
+                    validation_issues += 1
+                    
+            # Check for project name (with special handling for withdrawn_projects)
+            if not any(col in cols for col in project_name_cols):
+                print(f"ISSUE: No project name column found in {table}")
+                validation_issues += 1
+              # Check for null values in important columns
+            row_count = pd.read_sql(f"SELECT COUNT(*) as count FROM {table}", conn).iloc[0,0]
+            if row_count > 0:
+                # Check queue_position
+                if 'queue_position' in cols:
+                    null_count = pd.read_sql(
+                        f"SELECT COUNT(*) as count FROM {table} WHERE queue_position IS NULL OR queue_position = ''", 
+                        conn
+                    ).iloc[0,0]
+                    if null_count > 0:
+                        pct = (null_count / row_count) * 100
+                        print(f"ISSUE: {null_count} rows ({pct:.1f}%) have null values in queue_position in {table}")
+                        validation_issues += 1
+                
+                # Check project_name (with special handling for withdrawn_projects)
+                if table == 'withdrawn_projects':
+                    if 'Unnamed: 0_level_0 Project Name - Confidential' in cols:
+                        project_col = 'Unnamed: 0_level_0 Project Name - Confidential'
+                    else:
+                        project_col = 'project_name'
+                else:
+                    project_col = 'project_name'
+                
+                if project_col in cols:
+                    null_count = pd.read_sql(
+                        f"SELECT COUNT(*) as count FROM {table} WHERE {project_col} IS NULL OR {project_col} = ''", 
+                        conn
+                    ).iloc[0,0]
+                    if null_count > 0:
+                        pct = (null_count / row_count) * 100
+                        print(f"ISSUE: {null_count} rows ({pct:.1f}%) have null values in project name column in {table}")
+                        validation_issues += 1
+            else:
+                print(f"INFO: Table {table} is empty (0 rows)")
+        
+        except Exception as e:
+            print(f"Error validating {table}: {str(e)}")
+            validation_issues += 1
+    
+    if validation_issues > 0:
+        print(f"\nFound {validation_issues} data quality issues that may affect analysis results")
+    else:
+        print("\nNo data quality issues found, proceeding with analysis")
+    
+    return validation_issues
+
+
 # Main analysis function
 def main():
     """Run all analysis functions and generate reports."""
-    conn = sqlite3.connect(DB_FILE)
-    capacity_by_fuel(conn)
-    project_count_by_status(conn)
-    top5_iso_zones(conn)
-    annual_project_status(conn)  
-    cancellation_rate(conn)
-    average_lead_time(conn)
-    top_projects_by_net_mw(conn)
-    timeline_delay_analysis(conn)
-    conn.close()
+    print("Starting analysis...")
+    
+    if not os.path.exists(DB_FILE):
+        print(f"Error: Database file not found at {DB_FILE}")
+        print(f"Current working directory: {os.getcwd()}")
+        return
+        
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        print(f"Connected to database: {DB_FILE}")
+        
+        # Check if tables exist
+        tables = pd.read_sql(
+            "SELECT name FROM sqlite_master WHERE type='table'", 
+            conn
+        )
+        print(f"Found {len(tables)} tables in database:")
+        for idx, table in enumerate(tables['name']):
+            print(f"  {idx+1}. {table}")
+            
+        # Try to get column names from grid_generation_queue table
+        try:
+            cols = pd.read_sql("PRAGMA table_info(grid_generation_queue)", conn)
+            print(f"\nFound {len(cols)} columns in grid_generation_queue table")
+            print("First 5 columns:", cols['name'][:5].tolist())
+        except Exception as e:
+            print(f"Error getting columns: {str(e)}")
+            
+        # Validate data quality before running analyses
+        validate_data_quality(conn)
+              # Run all analyses with individual error handling for each
+        analysis_functions = [
+            ('capacity_by_fuel', capacity_by_fuel),
+            ('project_count_by_status', project_count_by_status),
+            ('top5_iso_zones', top5_iso_zones),
+            ('cancellation_rate', cancellation_rate),
+            ('average_lead_time', average_lead_time),
+            ('top_projects_by_net_mw', top_projects_by_net_mw),
+            ('timeline_delay_analysis', timeline_delay_analysis)
+        ]
+        
+        success_count = 0
+        for analysis_name, analysis_func in analysis_functions:
+            try:
+                print(f"\nRunning analysis: {analysis_name}")
+                analysis_func(conn)
+                success_count += 1
+            except Exception as e:
+                print(f"Error in {analysis_name}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                print(f"Continuing with next analysis...")
+        
+        print(f"\nAnalysis complete - {success_count} of {len(analysis_functions)} analyses completed successfully")
+    except Exception as e:
+        print(f"Error during analysis: {str(e)}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        if 'conn' in locals():
+            conn.close()
+            print("Connection closed")
 
 if __name__ == '__main__':
     main()

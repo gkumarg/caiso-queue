@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  caiso-queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./raw:/app/raw
+      - ./data:/app/data
+      - ./reports:/app/reports
+    environment:
+      - TZ=America/Los_Angeles
+      # Add any additional environment variables as needed
+      # - SMTP_HOST=smtp.example.com
+      # - SMTP_USER=user@example.com
+      # - SMTP_PASS=password
+      # - NOTIFICATION_EMAIL=alerts@example.com

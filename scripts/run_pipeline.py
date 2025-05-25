@@ -21,9 +21,7 @@ def run_pipeline():
         print(f"Download successful: {latest_file}")
     except Exception as e:
         print(f"Error downloading queue report: {str(e)}")
-        sys.exit(1)
-
-    # Step 2: Parse and load data
+        sys.exit(1)    # Step 2: Parse and load data
     print("\n=== Parsing and loading data ===")
     try:
         from parse_queue import main as parse_main
@@ -32,7 +30,7 @@ def run_pipeline():
     except Exception as e:
         print(f"Error parsing queue data: {str(e)}")
         sys.exit(1)
-
+        
     # Step 3: Analyze data and generate reports
     print("\n=== Analyzing data and generating reports ===")
     try:
