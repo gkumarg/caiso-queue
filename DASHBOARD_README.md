@@ -1,6 +1,6 @@
-# How to Run the CAISO Generator Interconnection Queue Dashboard
+# How to Run the CAISO Generation Interconnection Queue Dashboard
 
-This document provides instructions for running the CAISO Generator Interconnection Queue Dashboard.
+This document provides instructions for running the CAISO Generation Interconnection Queue Dashboard.
 
 ## Using Docker (Recommended)
 
@@ -73,7 +73,7 @@ The dashboard provides the following views:
 - Timeline Delays analysis
 - Top Projects by capacity
 
-Each view includes interactive filters and visualizations to help analyze the CAISO Generator Interconnection Queue data.
+Each view includes interactive filters and visualizations to help analyze the CAISO Generation Interconnection Queue data.
 
 ## Data Sources
 

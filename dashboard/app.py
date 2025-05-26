@@ -1,5 +1,5 @@
 """
-CAISO Generator Interconnection Queue Dashboard
+CAISO Generation Interconnection Queue Dashboard
 """
 import streamlit as st
 import plotly.express as px
@@ -24,7 +24,7 @@ except ImportError:
 
 # Set page config
 st.set_page_config(
-    page_title="CAISO Generator Interconnection Queue Dashboard",
+    page_title="CAISO Generation Interconnection Queue Dashboard",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -504,7 +504,7 @@ def show_top_projects():
 def main():
     """Main function to render the Streamlit dashboard"""
     # Title and introduction
-    st.title("CAISO Generator Interconnection Queue Dashboard")
+    st.title("CAISO Generation Interconnection Queue Dashboard")
     
     # Add current date 
     st.markdown("Data as of: **May 25, 2025**")
@@ -522,7 +522,7 @@ def main():
     # About section
     with st.sidebar.expander("About this Dashboard"):
         st.markdown("""
-        This dashboard visualizes data from the CAISO Generator 
+        This dashboard visualizes data from the CAISO Generation 
         Interconnection Queue, providing insights into renewable 
         energy projects in California.
         
