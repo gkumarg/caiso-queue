@@ -1,5 +1,5 @@
 """
-Analysis script for CAISO queue data using simplified column names
+Analysis script for CAISO queue data
 """
 import pandas as pd
 import sqlite3
