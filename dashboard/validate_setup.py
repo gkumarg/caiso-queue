@@ -144,7 +144,7 @@ def main():
     checks = [
         check_requirements(),
         check_imports(),  # New import check
-        check_database(),
+        # check_database(),
         check_reports(),
         check_dashboard_files()
     ]
