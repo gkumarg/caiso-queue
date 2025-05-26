@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-Download the latest CAISO Queue Report Excel file from the CAISO website.
+Download the latest CAISO Queue Report Excel file from the CAISO website. There is also
+a pdf version available, but the Excel file is preferred for data processing.
 The file will be saved with a date suffix for tracking historical data.
 """
 
