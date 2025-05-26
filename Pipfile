@@ -4,8 +4,21 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [packages]
-pandas    = "*"
+pandas = "*"
 openpyxl = "*"
+requests = "*"
+python-dotenv = "*"
+streamlit = "*"
+plotly = "*"
+sqlalchemy = "*"
+numpy = "*"
+matplotlib = "*"
+pillow = "*"
+
+[dev-packages]
+pytest = "*"
+flake8 = "*"
+black = "*"
 
 [requires]
 python_version = "3.10"
