@@ -1,7 +1,8 @@
 version: '3.8'
 
 services:
-  caiso-queue:
+  # Service for running the complete data pipeline
+  caiso-queue-pipeline:
     build:
       context: .
       dockerfile: Dockerfile
@@ -16,3 +17,36 @@ services:
       # - SMTP_USER=user@example.com
       # - SMTP_PASS=password
       # - NOTIFICATION_EMAIL=alerts@example.com
+    command: pipeline
+    # Service for running the dashboard
+  caiso-queue-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./raw:/app/raw
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./dashboard:/app/dashboard  # Mount the dashboard directory directly for easier development
+    ports:
+      - "8501:8501"
+    environment:
+      - TZ=America/Los_Angeles
+      - PYTHONPATH=/app:/app/dashboard  # Set PYTHONPATH explicitly in the environment
+    command: dashboard
+    restart: unless-stopped
+    
+  # Service for diagnosing import issues
+  caiso-queue-diagnose:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./raw:/app/raw
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./dashboard:/app/dashboard  # Mount the dashboard directory directly
+    environment:
+      - TZ=America/Los_Angeles
+      - PYTHONPATH=/app:/app/dashboard
+    command: diagnose
