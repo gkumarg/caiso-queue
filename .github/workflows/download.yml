@@ -35,7 +35,7 @@ jobs:
             -v ${PWD}/data:/app/data \
             -v ${PWD}/reports:/app/reports \
             -v ${PWD}/raw:/app/raw \
-            caiso-queue:latest
+            caiso-queue:latest pipeline
       
       - name: Commit and push changes
         run: |
