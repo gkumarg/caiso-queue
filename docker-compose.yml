@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Service for running the complete data pipeline
   caiso-queue-pipeline:
