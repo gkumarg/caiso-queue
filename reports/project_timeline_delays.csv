@@ -1,5 +1,4 @@
 project_name,queue_position,proposed_online_date,current_online_date,fuel_types,delay_days
-SALINAN ENERGY,2008,2028-04-11 07:00:00,2032-09-17 07:00:00,Wind Turbine/Battery,1620
 MONTEZUMA (HIGH WINDS III),22,2005-06-30 07:00:00,2024-04-01 07:00:00,Wind Turbine/Battery,6850
 TULE WIND,32,2007-09-01 07:00:00,2027-12-31 08:00:00,Wind Turbine,7426
 MIDWAY PEAKING AGGREGATE,54,2008-06-01 07:00:00,2027-06-30 07:00:00,Natural Gas/Battery,6968

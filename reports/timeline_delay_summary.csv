@@ -1,6 +1,2 @@
 average_delay_days,median_delay_days,min_delay_days,max_delay_days,positive_delay_count,negative_delay_count,no_change_count,delay_percentage
-<<<<<<< HEAD
 2164.6385869565215,1951.0,0,7760,363,0,5,98.6413043478261
-=======
-2163.162601626016,1936.0,0,7760,364,0,5,98.6449864498645
->>>>>>> 53c79db9df0c78c00a625a336930e8ffc8a301a1
