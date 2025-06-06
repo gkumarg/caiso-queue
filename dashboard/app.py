@@ -39,7 +39,8 @@ KPI_OPTIONS = [
     "Top ISO Zones", 
     "Lead Time Analysis", 
     "Timeline Delays",
-    "Top Projects"
+    "Top Projects",
+    "Project Map"
 ]
 
 @st.cache_resource
@@ -501,6 +502,103 @@ def show_top_projects():
     except Exception as e:
         st.error(f"Error loading top projects data: {str(e)}")
 
+def show_project_map():
+    """Show map visualization of projects by county and state"""
+    loader = get_data_loader()
+    if not loader:
+        return
+    
+    st.subheader("Project Locations Map")
+    
+    # Add status filter
+    status_filter = st.selectbox(
+        "Filter by Project Status:",
+        options=['All', 'Active', 'Completed', 'Withdrawn'],
+        index=0
+    )
+    
+    # Get data with status filter
+    status = status_filter.lower() if status_filter != 'All' else 'all'
+    df = loader.get_project_locations(status=status)
+    
+    if df.empty:
+        st.warning("No project location data available.")
+        return
+    
+    # Aggregate data by county and state
+    agg_df = df.groupby(['county', 'state', 'latitude', 'longitude']).agg({
+        'project_name': 'count',
+        'capacity': 'sum'
+    }).reset_index()
+    
+    agg_df.columns = ['county', 'state', 'latitude', 'longitude', 'project_count', 'total_capacity']
+    
+    # Create hover text
+    agg_df['hover_text'] = agg_df.apply(
+        lambda x: f"{x['county']} County, {x['state']}<br>" +
+                 f"Projects: {x['project_count']}<br>" +
+                 f"Total Capacity: {format_mw(x['total_capacity'])}",
+        axis=1
+    )
+    
+    # Create the map using scatter_map
+    fig = px.scatter_map(
+        agg_df,
+        lat='latitude',
+        lon='longitude',
+        hover_name='hover_text',
+        size='project_count',
+        color='total_capacity',
+        color_continuous_scale='Viridis',
+        size_max=15,
+        zoom=4
+    )
+    
+    fig.update_layout(
+        title=f"Project Locations by County ({status_filter} Projects)",
+        mapbox=dict(
+            center=dict(lat=37.7749, lon=-122.4194),  # Center on California
+            zoom=5,
+            style="carto-positron"
+        ),
+        margin=dict(l=0, r=0, t=30, b=0)
+    )
+    
+    # Display the map
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Add some spacing
+    st.markdown("---")
+    
+    # Show summary statistics in a container with padding
+    with st.container():
+        st.markdown("### Summary Statistics")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Projects", f"{agg_df['project_count'].sum():,}")
+        with col2:
+            st.metric("Total Capacity", format_mw(agg_df['total_capacity'].sum()))
+    
+    # Add some spacing
+    st.markdown("---")
+    
+    # Show detailed data table in a container with padding
+    with st.container():
+        st.markdown("### Detailed Project Counts by County")
+        st.dataframe(
+            agg_df.sort_values('project_count', ascending=False),
+            column_config={
+                "county": "County",
+                "state": "State",
+                "project_count": "Number of Projects",
+                "total_capacity": st.column_config.NumberColumn(
+                    "Total Capacity (MW)",
+                    format="%.2f"
+                )
+            },
+            hide_index=True
+        )
+
 def main():
     """Main function to render the Streamlit dashboard"""
     # Title and introduction
@@ -545,6 +643,8 @@ def main():
         show_timeline_delays()
     elif selected_kpi == "Top Projects":
         show_top_projects()
+    elif selected_kpi == "Project Map":
+        show_project_map()
 
 if __name__ == "__main__":
     main()

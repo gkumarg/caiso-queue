@@ -26,7 +26,7 @@ class DataLoader:
             conn = self.get_conn()
             df = pd.read_sql(
                 """
-                SELECT fuel_types AS fuel, SUM(mw_1) AS total_mw
+                SELECT fuel_types AS fuel, SUM(net_mw) AS total_mw
                 FROM grid_generation_queue
                 GROUP BY fuel_types
                 """, conn
@@ -45,7 +45,7 @@ class DataLoader:
                 SELECT 
                     'Active' as status,
                     COUNT(*) AS project_count,
-                    SUM(mw_1) AS total_mw
+                    SUM(net_mw) AS total_mw
                 FROM grid_generation_queue
                 
                 UNION ALL
@@ -53,7 +53,7 @@ class DataLoader:
                 SELECT 
                     'Completed' as status,
                     COUNT(*) AS project_count,
-                    SUM(mw_1) AS total_mw
+                    SUM(net_mw) AS total_mw
                 FROM completed_projects
                 
                 UNION ALL
@@ -61,7 +61,7 @@ class DataLoader:
                 SELECT 
                     'Withdrawn' as status,
                     COUNT(*) AS project_count,
-                    SUM(mw_1) AS total_mw
+                    SUM(net_mw) AS total_mw
                 FROM withdrawn_projects
                 """, conn
             )
@@ -84,7 +84,7 @@ class DataLoader:
             conn = self.get_conn()
             df = pd.read_sql(
                 """
-                SELECT pto_study_region AS iso_zone, SUM(mw_1) AS total_mw
+                SELECT pto_study_region AS iso_zone, SUM(net_mw) AS total_mw
                 FROM grid_generation_queue
                 GROUP BY pto_study_region
                 ORDER BY total_mw DESC
@@ -113,19 +113,19 @@ class DataLoader:
             conn = self.get_conn()
             # Get active MW from active projects
             active = pd.read_sql(
-                "SELECT SUM(mw_1) AS total_mw FROM grid_generation_queue", 
+                "SELECT SUM(net_mw) AS total_mw FROM grid_generation_queue", 
                 conn
             ).iloc[0,0] or 0
             
             # Get completed MW from completed projects
             completed = pd.read_sql(
-                "SELECT SUM(mw_1) AS total_mw FROM completed_projects", 
+                "SELECT SUM(net_mw) AS total_mw FROM completed_projects", 
                 conn
             ).iloc[0,0] or 0
 
             # Get total MW from withdrawn projects
             withdrawn = pd.read_sql(
-                "SELECT SUM(mw_1) AS withdrawn_mw FROM withdrawn_projects", 
+                "SELECT SUM(net_mw) AS withdrawn_mw FROM withdrawn_projects", 
                 conn
             ).iloc[0,0] or 0
             
@@ -226,3 +226,84 @@ class DataLoader:
         )
         conn.close()
         return df
+
+    def get_project_locations(self, status='all'):
+        """Load project location data with optional status filter
+        
+        Args:
+            status (str): Filter by status ('active', 'completed', 'withdrawn', or 'all')
+        """
+        try:
+            conn = self.get_conn()
+            
+            # Base query for active projects
+            active_query = """
+                SELECT 
+                    project_name,
+                    county,
+                    state,
+                    net_mw as capacity,
+                    CAST(latitude AS FLOAT) as latitude,
+                    CAST(longitude AS FLOAT) as longitude,
+                    'Active' as status
+                FROM grid_generation_queue
+                WHERE county IS NOT NULL AND state IS NOT NULL
+            """
+            
+            # Base query for completed projects
+            completed_query = """
+                SELECT 
+                    project_name,
+                    county,
+                    state,
+                    net_mw as capacity,
+                    CAST(latitude AS FLOAT) as latitude,
+                    CAST(longitude AS FLOAT) as longitude,
+                    'Completed' as status
+                FROM completed_projects
+                WHERE county IS NOT NULL AND state IS NOT NULL
+            """
+            
+            # Base query for withdrawn projects
+            withdrawn_query = """
+                SELECT 
+                    project_name,
+                    county,
+                    state,
+                    net_mw as capacity,
+                    CAST(latitude AS FLOAT) as latitude,
+                    CAST(longitude AS FLOAT) as longitude,
+                    'Withdrawn' as status
+                FROM withdrawn_projects
+                WHERE county IS NOT NULL AND state IS NOT NULL
+            """
+            
+            # Combine queries based on status filter
+            if status == 'active':
+                query = active_query
+            elif status == 'completed':
+                query = completed_query
+            elif status == 'withdrawn':
+                query = withdrawn_query
+            else:  # 'all'
+                query = f"{active_query} UNION ALL {completed_query} UNION ALL {withdrawn_query}"
+            
+            df = pd.read_sql(query, conn)
+            conn.close()
+            
+            # Clean up county names (remove 'County' suffix and standardize)
+            df['county'] = df['county'].str.replace(' County', '', case=False)
+            df['county'] = df['county'].str.strip()
+            
+            # Ensure latitude and longitude are numeric
+            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+            
+            # Drop rows with invalid coordinates
+            df = df.dropna(subset=['latitude', 'longitude'])
+            
+            return df
+            
+        except Exception as e:
+            print(f"Error in get_project_locations: {str(e)}")
+            return pd.DataFrame(columns=['project_name', 'county', 'state', 'capacity', 'latitude', 'longitude', 'status'])
