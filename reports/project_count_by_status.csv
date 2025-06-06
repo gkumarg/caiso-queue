@@ -1,4 +1,8 @@
 status,project_count,total_mw
+<<<<<<< HEAD
 Active,370,100281.07890764308
+=======
+Active,371,101471.07890764307
+>>>>>>> 53c79db9df0c78c00a625a336930e8ffc8a301a1
 Completed,232,31753.375993526937
 Withdrawn,1677,346387.0808423585
