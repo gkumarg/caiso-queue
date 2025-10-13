@@ -603,9 +603,15 @@ def main():
     """Main function to render the Streamlit dashboard"""
     # Title and introduction
     st.title("CAISO Generation Interconnection Queue Dashboard")
-    
-    # Add current date 
-    st.markdown("Data as of: **May 25, 2025**")
+
+    # Add current date based on latest ingestion
+    loader = get_data_loader()
+    latest_data_date = loader.get_latest_ingestion_date() if loader else None
+    if latest_data_date:
+        formatted_date = latest_data_date.strftime("%B %d, %Y")
+        st.markdown(f"Data as of: **{formatted_date}**")
+    else:
+        st.markdown("Data as of: **Unavailable**")
     
     # Sidebar
     st.sidebar.image("dashboard/gen_queue_img.png", width=200)

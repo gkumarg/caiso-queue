@@ -307,3 +307,43 @@ class DataLoader:
         except Exception as e:
             print(f"Error in get_project_locations: {str(e)}")
             return pd.DataFrame(columns=['project_name', 'county', 'state', 'capacity', 'latitude', 'longitude', 'status'])
+
+    def get_latest_ingestion_date(self):
+        """Return the most recent ingestion date across known tables."""
+        conn = None
+        try:
+            conn = self.get_conn()
+            tables = [
+                'grid_generation_queue',
+                'completed_projects',
+                'withdrawn_projects'
+            ]
+            latest_dates = []
+            for table in tables:
+                exists = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,)
+                ).fetchone()
+                if not exists:
+                    continue
+                df = pd.read_sql(
+                    f"SELECT MAX(ingestion_date) AS latest_date FROM {table}",
+                    conn,
+                    parse_dates=['latest_date']
+                )
+                if df.empty:
+                    continue
+                latest_value = df['latest_date'].iloc[0]
+                if pd.isna(latest_value):
+                    continue
+                latest_dates.append(latest_value)
+            if not latest_dates:
+                return None
+            latest = max(latest_dates)
+            return latest.date() if hasattr(latest, 'date') else latest
+        except Exception as e:
+            print(f"Error getting latest ingestion date: {str(e)}")
+            return None
+        finally:
+            if conn is not None:
+                conn.close()
