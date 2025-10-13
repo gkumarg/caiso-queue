@@ -2,10 +2,10 @@ project_name,queue_position,net_mw,fuel_types,status,county,state
 ATLAS COMPLEX,1402,3200.0,Battery/Solar,Active,LA PAZ,AZ
 JOVE SOLAR,2023,2000.0,Solar/Battery,Active,LA PAZ,AZ
 HOLMAN,1889,1500.0,Battery/Wind Turbine,Active,MONTEREY,CA
-ISLAY,1998,1500.0,Battery/Wind Turbine,Active,SAN LUIS OBISPO,CA
-ETERNAL 2,2050,1400.0,Pumped-Storage hydro/Battery,Active,RIVERSIDE,CA
 SANBORN HYBRID 3,1632,1400.0,Battery/Solar,Active,KERN,CA
 ANGELENO SOLAR FARM,1625,1150.0,Battery/Solar,Active,LOS ANGELES,CA
 DARDEN,1949,1150.0,Battery/Solar,Active,FRESNO,CA
 UMBRIEL,2166,1150.0,Battery/Solar,Active,IMPERIAL,CA
 WINGTIP SOLAR 1,1943,1150.0,Solar/Battery,Active,MERCED,CA
+BOUSE SOLAR AND STORAGE PLANT,2052,1000.0,Solar/Battery,Active,LA PAZ,AZ
+PLUM,1968,1000.0,Solar/Battery,Active,KINGS,CA

@@ -5,6 +5,26 @@ import pandas as pd
 import sqlite3
 import os
 
+
+def _safe_float(value, default=0.0):
+    """Convert value to float, returning default on failure."""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value, default=0):
+    """Convert value to int, returning default on failure."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 DB_FILE = 'data/caiso_queue.db'
 REPORTS_DIR = 'reports'
 
@@ -20,6 +40,9 @@ def capacity_by_fuel(conn):
         """
         SELECT fuel_types AS fuel, SUM(mw_1) AS total_mw
         FROM grid_generation_queue
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM grid_generation_queue
+        )
         GROUP BY fuel_types
         """, conn
     )
@@ -38,6 +61,9 @@ def project_count_by_status(conn):
             COUNT(*) AS project_count,
             SUM(mw_1) AS total_mw
         FROM grid_generation_queue
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM grid_generation_queue
+        )
         
         UNION ALL
         
@@ -46,6 +72,9 @@ def project_count_by_status(conn):
             COUNT(*) AS project_count,
             SUM(mw_1) AS total_mw
         FROM completed_projects
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM completed_projects
+        )
         
         UNION ALL
         
@@ -54,6 +83,9 @@ def project_count_by_status(conn):
             COUNT(*) AS project_count,
             SUM(mw_1) AS total_mw
         FROM withdrawn_projects
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM withdrawn_projects
+        )
         """, conn
     )
     df.to_csv('reports/project_count_by_status.csv', index=False)
@@ -68,6 +100,9 @@ def top5_iso_zones(conn):
         """
         SELECT pto_study_region AS iso_zone, SUM(mw_1) AS total_mw
         FROM grid_generation_queue
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM grid_generation_queue
+        )
         GROUP BY pto_study_region
         ORDER BY total_mw DESC
         LIMIT 5
@@ -82,22 +117,43 @@ def cancellation_rate(conn):
     Calculate ratio of withdrawn project capacity to total capacity
     """
     # Get active MW from active projects
-    active = pd.read_sql(
-        "SELECT SUM(mw_1) AS total_mw FROM grid_generation_queue", 
+    active_result = pd.read_sql(
+        """
+        SELECT SUM(mw_1) AS total_mw
+        FROM grid_generation_queue
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM grid_generation_queue
+        )
+        """,
         conn
-    ).iloc[0,0] or 0
+    ).iloc[0,0]
+    active = _safe_float(active_result)
     
     # Get completed MW from completed projects
-    completed = pd.read_sql(
-        "SELECT SUM(mw_1) AS total_mw FROM completed_projects", 
+    completed_result = pd.read_sql(
+        """
+        SELECT SUM(mw_1) AS total_mw
+        FROM completed_projects
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM completed_projects
+        )
+        """,
         conn
-    ).iloc[0,0] or 0
+    ).iloc[0,0]
+    completed = _safe_float(completed_result)
 
     # Get total MW from withdrawn projects
-    withdrawn = pd.read_sql(
-        "SELECT SUM(mw_1) AS withdrawn_mw FROM withdrawn_projects", 
+    withdrawn_result = pd.read_sql(
+        """
+        SELECT SUM(mw_1) AS withdrawn_mw
+        FROM withdrawn_projects
+        WHERE ingestion_date = (
+            SELECT MAX(ingestion_date) FROM withdrawn_projects
+        )
+        """,
         conn
-    ).iloc[0,0] or 0
+    ).iloc[0,0]
+    withdrawn = _safe_float(withdrawn_result)
     
     total = active + completed + withdrawn
     rate = withdrawn / total if total else None
@@ -114,7 +170,8 @@ def average_lead_time(conn):
         "request_receive_date AS Request_Received_Date "
         "FROM grid_generation_queue "
         "WHERE queue_date IS NOT NULL AND "
-        "request_receive_date IS NOT NULL", conn,
+        "request_receive_date IS NOT NULL AND "
+        "ingestion_date = (SELECT MAX(ingestion_date) FROM grid_generation_queue)", conn,
         parse_dates=['Queue_Date','Request_Received_Date']
     )
     df['lead_time'] = (df['Queue_Date'] - df['Request_Received_Date']).dt.days
@@ -139,6 +196,9 @@ def top_projects_by_net_mw(conn):
             state
         FROM grid_generation_queue
         WHERE net_mw IS NOT NULL
+        AND ingestion_date = (
+            SELECT MAX(ingestion_date) FROM grid_generation_queue
+        )
         GROUP BY project_name, queue_position
         ORDER BY MAX(net_mw) DESC
         LIMIT 10
@@ -163,6 +223,9 @@ def timeline_delay_analysis(conn):
     FROM grid_generation_queue
     WHERE proposed_online_date IS NOT NULL
     AND current_online_date IS NOT NULL
+    AND ingestion_date = (
+        SELECT MAX(ingestion_date) FROM grid_generation_queue
+    )
     """
     
     try:
@@ -260,14 +323,19 @@ def validate_data_quality(conn):
                 print(f"ISSUE: No project name column found in {table}")
                 validation_issues += 1
               # Check for null values in important columns
-            row_count = pd.read_sql(f"SELECT COUNT(*) as count FROM {table}", conn).iloc[0,0]
+            row_count_result = pd.read_sql(
+                f"SELECT COUNT(*) as count FROM {table}",
+                conn
+            ).iloc[0,0]
+            row_count = _safe_int(row_count_result)
             if row_count > 0:
                 # Check queue_position
                 if 'queue_position' in cols:
-                    null_count = pd.read_sql(
-                        f"SELECT COUNT(*) as count FROM {table} WHERE queue_position IS NULL OR queue_position = ''", 
+                    null_count_result = pd.read_sql(
+                        f"SELECT COUNT(*) as count FROM {table} WHERE queue_position IS NULL OR queue_position = ''",
                         conn
                     ).iloc[0,0]
+                    null_count = _safe_int(null_count_result)
                     if null_count > 0:
                         pct = (null_count / row_count) * 100
                         print(f"ISSUE: {null_count} rows ({pct:.1f}%) have null values in queue_position in {table}")
@@ -283,10 +351,11 @@ def validate_data_quality(conn):
                     project_col = 'project_name'
                 
                 if project_col in cols:
-                    null_count = pd.read_sql(
-                        f"SELECT COUNT(*) as count FROM {table} WHERE {project_col} IS NULL OR {project_col} = ''", 
+                    null_count_result = pd.read_sql(
+                        f"SELECT COUNT(*) as count FROM {table} WHERE {project_col} IS NULL OR {project_col} = ''",
                         conn
                     ).iloc[0,0]
+                    null_count = _safe_int(null_count_result)
                     if null_count > 0:
                         pct = (null_count / row_count) * 100
                         print(f"ISSUE: {null_count} rows ({pct:.1f}%) have null values in project name column in {table}")
