@@ -25,6 +25,9 @@ logs/
 *.sqlite
 *.sqlite3
 
+# Exception: Keep the main database for dashboard
+!data/caiso_queue.db
+
 # Keep directory structure with .gitkeep
 !/raw/.gitkeep
 !/data/.gitkeep
