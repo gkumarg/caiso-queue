@@ -308,6 +308,87 @@ class DataLoader:
             print(f"Error in get_project_locations: {str(e)}")
             return pd.DataFrame(columns=['project_name', 'county', 'state', 'capacity', 'latitude', 'longitude', 'status'])
 
+    def get_all_projects(self, table='all', columns=None):
+        """Get all projects data with optional table and column filtering
+
+        Args:
+            table (str): Which table to query ('active', 'completed', 'withdrawn', or 'all')
+            columns (list): List of column names to select, or None for all columns
+
+        Returns:
+            pd.DataFrame: DataFrame with project data
+        """
+        conn = None
+        try:
+            conn = self.get_conn()
+
+            # Map friendly names to actual table names
+            table_map = {
+                'active': 'grid_generation_queue',
+                'completed': 'completed_projects',
+                'withdrawn': 'withdrawn_projects'
+            }
+
+            # Determine column selection
+            col_select = '*' if not columns else ', '.join(columns)
+
+            # Build query based on table selection
+            if table == 'all':
+                # Get all projects from all tables with a status column
+                queries = []
+                for status, table_name in table_map.items():
+                    if columns:
+                        # Add status column to selected columns
+                        cols_with_status = columns + [f"'{status.capitalize()}' as status"]
+                        col_select = ', '.join(cols_with_status)
+                    else:
+                        col_select = f"*, '{status.capitalize()}' as status"
+                    queries.append(f"SELECT {col_select} FROM {table_name}")
+
+                query = ' UNION ALL '.join(queries)
+            else:
+                # Single table query
+                table_name = table_map.get(table, 'grid_generation_queue')
+                status = table.capitalize()
+                if columns:
+                    cols_with_status = columns + [f"'{status}' as status"]
+                    col_select = ', '.join(cols_with_status)
+                else:
+                    col_select = f"*, '{status}' as status"
+                query = f"SELECT {col_select} FROM {table_name}"
+
+            df = pd.read_sql(query, conn)
+            return df
+
+        except Exception as e:
+            print(f"Error in get_all_projects: {str(e)}")
+            return pd.DataFrame()
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def get_table_columns(self, table='grid_generation_queue'):
+        """Get column names from a specific table
+
+        Args:
+            table (str): Table name
+
+        Returns:
+            list: List of column names
+        """
+        conn = None
+        try:
+            conn = self.get_conn()
+            cursor = conn.execute(f"SELECT * FROM {table} LIMIT 0")
+            columns = [description[0] for description in cursor.description]
+            return columns
+        except Exception as e:
+            print(f"Error getting columns from {table}: {str(e)}")
+            return []
+        finally:
+            if conn is not None:
+                conn.close()
+
     def get_latest_ingestion_date(self):
         """Return the most recent ingestion date across known tables."""
         conn = None

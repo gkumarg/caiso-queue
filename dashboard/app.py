@@ -34,13 +34,14 @@ st.set_page_config(
 DEFAULT_DB_PATH = 'data/caiso_queue.db'
 KPI_OPTIONS = [
     "Overview",
-    "Capacity by Fuel Type", 
-    "Project Status", 
-    "Top ISO Zones", 
-    "Lead Time Analysis", 
+    "Capacity by Fuel Type",
+    "Project Status",
+    "Top ISO Zones",
+    "Lead Time Analysis",
     "Timeline Delays",
     "Top Projects",
-    "Project Map"
+    "Project Map",
+    "Data Table"
 ]
 
 @st.cache_resource
@@ -599,6 +600,178 @@ def show_project_map():
             hide_index=True
         )
 
+def show_data_table():
+    """Show interactive data table with filtering capabilities"""
+    loader = get_data_loader()
+    if not loader:
+        return
+
+    st.subheader("Project Data Table")
+    st.markdown("Browse and filter all projects in the database")
+
+    # Sidebar controls
+    st.sidebar.markdown("### Table Filters")
+
+    # Status filter
+    status_filter = st.sidebar.selectbox(
+        "Project Status:",
+        options=['All', 'Active', 'Completed', 'Withdrawn'],
+        index=0
+    )
+
+    # Get data based on status filter
+    status_key = status_filter.lower() if status_filter != 'All' else 'all'
+    df = loader.get_all_projects(table=status_key)
+
+    if df.empty:
+        st.warning("No data available.")
+        return
+
+    # Get all column names
+    all_columns = list(df.columns)
+
+    # Important columns to show by default
+    default_columns = [
+        'project_name', 'queue_position', 'county', 'state',
+        'fuel_types', 'net_mw', 'mw_1', 'status'
+    ]
+    # Filter to only columns that exist
+    default_columns = [col for col in default_columns if col in all_columns]
+
+    # Column selector
+    selected_columns = st.sidebar.multiselect(
+        "Select Columns to Display:",
+        options=all_columns,
+        default=default_columns
+    )
+
+    # Ensure at least one column is selected
+    if not selected_columns:
+        selected_columns = default_columns
+
+    # Apply column selection
+    df_display = df[selected_columns].copy()
+
+    # Fuel type filter (if fuel_types column exists)
+    if 'fuel_types' in df.columns:
+        fuel_types = set()
+        for fuel in df['fuel_types'].dropna():
+            for f in str(fuel).split('/'):
+                fuel_types.add(f.strip())
+
+        fuel_filter = st.sidebar.multiselect(
+            "Filter by Fuel Type:",
+            options=sorted(fuel_types),
+            default=[]
+        )
+
+        if fuel_filter:
+            df_display = df_display[df['fuel_types'].apply(
+                lambda x: any(f in str(x) for f in fuel_filter) if pd.notna(x) else False
+            )]
+
+    # County filter (if county column exists)
+    if 'county' in df.columns:
+        counties = sorted(df['county'].dropna().unique())
+        county_filter = st.sidebar.multiselect(
+            "Filter by County:",
+            options=counties,
+            default=[]
+        )
+
+        if county_filter:
+            df_display = df_display[df['county'].isin(county_filter)]
+
+    # State filter (if state column exists)
+    if 'state' in df.columns:
+        states = sorted(df['state'].dropna().unique())
+        state_filter = st.sidebar.multiselect(
+            "Filter by State:",
+            options=states,
+            default=[]
+        )
+
+        if state_filter:
+            df_display = df_display[df['state'].isin(state_filter)]
+
+    # Capacity filter (if net_mw or mw_1 exists)
+    capacity_col = None
+    if 'net_mw' in df.columns:
+        capacity_col = 'net_mw'
+    elif 'mw_1' in df.columns:
+        capacity_col = 'mw_1'
+
+    if capacity_col:
+        min_capacity = st.sidebar.number_input(
+            "Minimum Capacity (MW):",
+            min_value=0.0,
+            value=0.0,
+            step=10.0
+        )
+
+        if min_capacity > 0:
+            df_display = df_display[df[capacity_col].fillna(0) >= min_capacity]
+
+    # Text search
+    search_term = st.sidebar.text_input("Search in Project Names:", "")
+    if search_term and 'project_name' in df.columns:
+        df_display = df_display[df['project_name'].str.contains(
+            search_term, case=False, na=False
+        )]
+
+    # Display summary metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Projects", f"{len(df_display):,}")
+    with col2:
+        if capacity_col and capacity_col in df_display.columns:
+            total_capacity = df_display[capacity_col].sum()
+            st.metric("Total Capacity", format_mw(total_capacity))
+    with col3:
+        if 'status' in df_display.columns:
+            status_counts = df_display['status'].value_counts()
+            st.metric("Unique Statuses", len(status_counts))
+
+    # Display the filtered data
+    st.markdown("---")
+
+    # Configure column display
+    column_config = {}
+    if 'net_mw' in selected_columns:
+        column_config['net_mw'] = st.column_config.NumberColumn(
+            "Net MW", format="%.2f"
+        )
+    if 'mw_1' in selected_columns:
+        column_config['mw_1'] = st.column_config.NumberColumn(
+            "MW", format="%.2f"
+        )
+    if 'latitude' in selected_columns:
+        column_config['latitude'] = st.column_config.NumberColumn(
+            "Latitude", format="%.6f"
+        )
+    if 'longitude' in selected_columns:
+        column_config['longitude'] = st.column_config.NumberColumn(
+            "Longitude", format="%.6f"
+        )
+
+    # Display table with pagination
+    st.dataframe(
+        df_display,
+        column_config=column_config,
+        hide_index=True,
+        use_container_width=True,
+        height=600
+    )
+
+    # Download button
+    csv = df_display.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="Download Filtered Data as CSV",
+        data=csv,
+        file_name=f"caiso_projects_{status_filter.lower()}.csv",
+        mime="text/csv"
+    )
+
 def main():
     """Main function to render the Streamlit dashboard"""
     # Title and introduction
@@ -651,6 +824,8 @@ def main():
         show_top_projects()
     elif selected_kpi == "Project Map":
         show_project_map()
+    elif selected_kpi == "Data Table":
+        show_data_table()
 
 if __name__ == "__main__":
     main()
