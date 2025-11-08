@@ -12,22 +12,42 @@ This project automates the collection, processing, and analysis of CAISO's inter
 
 ## Setup
 
+### Prerequisites
+
+1. Docker & pipenv installed
+2. Python 3.10+
+3. Gmail account with App Password (for notifications)
+
 ### Local Development
 
-1. Ensure Docker & pipenv are installed
-2. Clone the repository
-3. Build: `docker build -t caiso-queue:latest .`
-4. Run the complete pipeline:   
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd caiso-queue
+   ```
+
+2. **Configure environment variables**
+   ```bash
+   # Copy the example file
+   cp .env.example .env
+
+   # Edit .env and add your credentials
+   # NEVER commit .env to git - it contains secrets!
+   ```
+
+3. **Build Docker image**
+   ```bash
+   docker build -t caiso-queue:latest .
+   ```
+
+4. **Run the complete pipeline**
    ```bash
    docker run --rm \
+     --env-file .env \
+     -v %CD%/data:/app/data \
      -v %CD%/reports:/app/reports \
      -v %CD%/raw:/app/raw \
-     -e SMTP_HOST=... \
-     -e SMTP_USER=... \
-     -e SMTP_PASS=... \
-     -e NOTIFICATION_EMAIL=... \
-     caiso-queue:latest \
-     sh -c "python scripts/run_pipeline.py && python scripts/analyze_queue.py && python scripts/cleanup_raw.py"
+     caiso-queue:latest pipeline
    ```
 
 ### Automated Updates
@@ -90,37 +110,24 @@ The analysis generates the following KPIs in the `reports/` directory:
    - Cleans up old raw files
    - Maintains optimal storage usage
 
-## Environment Setup
+## Security Best Practices
+
+⚠️ **IMPORTANT**: Never commit the `.env` file to git - it contains sensitive credentials!
+
+- Use `.env.example` as a template
+- Store actual credentials in `.env` (already gitignored)
+- For GitHub Actions, use [repository secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
+- For Gmail SMTP, use [App Passwords](https://support.google.com/accounts/answer/185833), not your main password
 
 ### GitHub Actions Setup
 
 1. Go to your repository on GitHub
 2. Navigate to Settings → Secrets and variables → Actions
-3. Add the following secrets:
-   - `SMTP_HOST`: Your SMTP server address
-   - `SMTP_USER`: SMTP username
-   - `SMTP_PASS`: SMTP password
-   - `NOTIFICATION_EMAIL`: Notification recipient
-
-### Local Development
-
-1. Create a `.env` file:
-   ```ini
-   SMTP_HOST=smtp.example.com
-   SMTP_USER=your_user
-   SMTP_PASS=your_pass
-   NOTIFICATION_EMAIL=you@example.com
-   ```
-
-2. Run with environment file:
-   ```cmd
-   docker run --rm ^
-     --env-file .env ^
-     -v %CD%/reports:/app/reports ^
-     -v %CD%/raw:/app/raw ^
-     caiso-queue:latest ^
-     sh -c "python scripts/run_pipeline.py"
-   ```
+3. Add the following repository secrets:
+   - `SMTP_HOST`: Your SMTP server address (e.g., smtp.gmail.com)
+   - `SMTP_USER`: SMTP username (your email)
+   - `SMTP_PASS`: SMTP App Password (not your regular password!)
+   - `NOTIFICATION_EMAIL`: Email to receive notifications
 
 ## Testing
 
