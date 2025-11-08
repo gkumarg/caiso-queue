@@ -606,6 +606,18 @@ def show_data_table():
     if not loader:
         return
 
+    # Check if loader has the required method
+    if not hasattr(loader, 'get_all_projects'):
+        st.error(
+            "⚠️ Data loader needs to be updated. Please reload the application.\n\n"
+            "**If running locally:** Restart the Streamlit server.\n\n"
+            "**If running on Streamlit Cloud:** Clear cache by pressing 'C' or restarting the app."
+        )
+        if st.button("Clear Cache and Reload"):
+            st.cache_resource.clear()
+            st.rerun()
+        return
+
     st.subheader("Project Data Table")
     st.markdown("Browse and filter all projects in the database")
 
@@ -621,7 +633,16 @@ def show_data_table():
 
     # Get data based on status filter
     status_key = status_filter.lower() if status_filter != 'All' else 'all'
-    df = loader.get_all_projects(table=status_key)
+
+    try:
+        df = loader.get_all_projects(table=status_key)
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        st.info("Try clearing the cache and reloading the page.")
+        if st.button("Clear Cache"):
+            st.cache_resource.clear()
+            st.rerun()
+        return
 
     if df.empty:
         st.warning("No data available.")
@@ -799,14 +820,24 @@ def main():
     # About section
     with st.sidebar.expander("About this Dashboard"):
         st.markdown("""
-        This dashboard visualizes data from the CAISO Generation 
-        Interconnection Queue, providing insights into renewable 
+        This dashboard visualizes data from the CAISO Generation
+        Interconnection Queue, providing insights into renewable
         energy projects in California.
-        
-        Data is sourced directly from CAISO's public queue reports 
+
+        Data is sourced directly from CAISO's public queue reports
         and updated weekly.
         """)
-    
+
+    # Cache management
+    with st.sidebar.expander("⚙️ Settings"):
+        st.markdown("**Cache Management**")
+        st.caption("Clear cache if you experience issues or after updates")
+        if st.button("Clear All Caches"):
+            st.cache_resource.clear()
+            st.cache_data.clear()
+            st.success("Cache cleared! Reloading...")
+            st.rerun()
+
     # Display the selected KPI visualization
     if selected_kpi == "Overview":
         create_overview()
