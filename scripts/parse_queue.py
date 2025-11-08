@@ -203,10 +203,23 @@ def ensure_dirs():
 
 # Flatten multi‐level headers
 def flatten_columns(df):
-    df.columns = [
-        ' '.join(filter(None, map(str, col))).strip()
-        for col in df.columns.values
-    ]
+    """
+    Flatten multi-level column headers into single-level.
+    If columns are already single-level, return as-is.
+    """
+    if isinstance(df.columns, pd.MultiIndex):
+        # Multi-level columns: join levels with spaces
+        df.columns = [
+            ' '.join(filter(None, map(str, col))).strip()
+            for col in df.columns.values
+        ]
+    elif not all(isinstance(col, str) for col in df.columns):
+        # Columns are tuples/lists but not MultiIndex
+        df.columns = [
+            ' '.join(filter(None, map(str, col))).strip() if isinstance(col, (tuple, list)) else str(col)
+            for col in df.columns.values
+        ]
+    # else: columns are already simple strings, leave them as-is
     return df
 
 # Parse a single sheet

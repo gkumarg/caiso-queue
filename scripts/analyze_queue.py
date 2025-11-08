@@ -46,7 +46,8 @@ def capacity_by_fuel(conn):
         GROUP BY fuel_types
         """, conn
     )
-    df.to_csv('reports/capacity_by_fuel.csv', index=False)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    df.to_csv(os.path.join(REPORTS_DIR, 'capacity_by_fuel.csv'), index=False)
     print(f"Generated capacity by fuel report with {len(df)} fuel types")
 
 # 2: Project count & capacity by status
@@ -56,7 +57,7 @@ def project_count_by_status(conn):
     """
     df = pd.read_sql(
         """
-        SELECT 
+        SELECT
             'Active' as status,
             COUNT(*) AS project_count,
             SUM(mw_1) AS total_mw
@@ -64,10 +65,10 @@ def project_count_by_status(conn):
         WHERE ingestion_date = (
             SELECT MAX(ingestion_date) FROM grid_generation_queue
         )
-        
+
         UNION ALL
-        
-        SELECT 
+
+        SELECT
             'Completed' as status,
             COUNT(*) AS project_count,
             SUM(mw_1) AS total_mw
@@ -75,10 +76,10 @@ def project_count_by_status(conn):
         WHERE ingestion_date = (
             SELECT MAX(ingestion_date) FROM completed_projects
         )
-        
+
         UNION ALL
-        
-        SELECT 
+
+        SELECT
             'Withdrawn' as status,
             COUNT(*) AS project_count,
             SUM(mw_1) AS total_mw
@@ -88,7 +89,8 @@ def project_count_by_status(conn):
         )
         """, conn
     )
-    df.to_csv('reports/project_count_by_status.csv', index=False)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    df.to_csv(os.path.join(REPORTS_DIR, 'project_count_by_status.csv'), index=False)
     print(f"Generated project count by status report with {len(df)} statuses")
 
 # 3: Top 5 ISO Zones by active capacity
@@ -108,7 +110,8 @@ def top5_iso_zones(conn):
         LIMIT 5
         """, conn
     )
-    df.to_csv('reports/top5_iso_zones.csv', index=False)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    df.to_csv(os.path.join(REPORTS_DIR, 'top5_iso_zones.csv'), index=False)
     print(f"Generated top 5 ISO zones report with the highest capacity regions")
 
 # 4: Cancellation rate
@@ -157,7 +160,8 @@ def cancellation_rate(conn):
     
     total = active + completed + withdrawn
     rate = withdrawn / total if total else None
-    pd.DataFrame([{'cancellation_rate': rate}]).to_csv('reports/cancellation_rate.csv', index=False)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    pd.DataFrame([{'cancellation_rate': rate}]).to_csv(os.path.join(REPORTS_DIR, 'cancellation_rate.csv'), index=False)
     print(f"Generated cancellation rate report: {rate:.2%}" if rate else "Generated cancellation rate report: N/A")
 
 # 5: Average lead time (days)
@@ -176,7 +180,8 @@ def average_lead_time(conn):
     )
     df['lead_time'] = (df['Queue_Date'] - df['Request_Received_Date']).dt.days
     avg = df['lead_time'].mean()
-    pd.DataFrame([{'average_lead_time_days': avg}]).to_csv('reports/average_lead_time.csv', index=False)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    pd.DataFrame([{'average_lead_time_days': avg}]).to_csv(os.path.join(REPORTS_DIR, 'average_lead_time.csv'), index=False)
     print(f"Generated average lead time report: {avg:.1f} days based on {len(df)} projects")
 
 # 6: Top 10 projects by Net MWs to Grid
@@ -204,7 +209,8 @@ def top_projects_by_net_mw(conn):
         LIMIT 10
         """, conn
     )
-    df.to_csv('reports/top_projects_by_net_mw.csv', index=False)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    df.to_csv(os.path.join(REPORTS_DIR, 'top_projects_by_net_mw.csv'), index=False)
     print(f"Generated top projects by net MW report with {len(df)} unique projects")
 
 # 7: Project timeline delay analysis
@@ -260,15 +266,16 @@ def timeline_delay_analysis(conn):
     # Calculate average delay by fuel type
     fuel_delays = df.groupby('fuel_types')['delay_days'].mean().reset_index()
     fuel_delays.columns = ['fuel_type', 'average_delay_days']
-    
+
     # Save detailed project-level data
-    df.to_csv('reports/project_timeline_delays.csv', index=False)
-    
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    df.to_csv(os.path.join(REPORTS_DIR, 'project_timeline_delays.csv'), index=False)
+
     # Save summary statistics
-    pd.DataFrame([delay_stats]).to_csv('reports/timeline_delay_summary.csv', index=False)
-    
+    pd.DataFrame([delay_stats]).to_csv(os.path.join(REPORTS_DIR, 'timeline_delay_summary.csv'), index=False)
+
     # Save fuel type analysis
-    fuel_delays.to_csv('reports/timeline_delay_by_fuel.csv', index=False)
+    fuel_delays.to_csv(os.path.join(REPORTS_DIR, 'timeline_delay_by_fuel.csv'), index=False)
     
     print(f"Generated timeline delay analysis with data from {len(df)} projects:")
     print(f"  - Average delay: {delay_stats['average_delay_days']:.1f} days")
