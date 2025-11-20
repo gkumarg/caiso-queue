@@ -421,9 +421,6 @@ class DataLoader:
                 'withdrawn': 'withdrawn_projects'
             }
 
-            # Determine column selection
-            col_select = '*' if not columns else ', '.join(columns)
-
             # Build WHERE clause if filtering by study process
             where_clause_active = ""
             where_clause_withdrawn = ""
@@ -447,7 +444,17 @@ class DataLoader:
                         cols_with_status = columns + [f"'{status.capitalize()}' as status"]
                         col_select = ', '.join(cols_with_status)
                     else:
-                        col_select = f"*, '{status.capitalize()}' as status"
+                        # For withdrawn_projects, we need to alias the study_process column
+                        if status == 'withdrawn':
+                            col_select = 'project_name, queue_position, request_receive_date, queue_date, application_status, ' \
+                                       '"Unnamed: 6_level_0 Study\nProcess" as study_process, ' \
+                                       'facility_type_1, facility_type_2, facility_type_3, fuel_type_1, fuel_type_2, fuel_type_3, ' \
+                                       'mw_1, mw_2, mw_3, net_mw, capacity_status, off_peak_deliverability, county, state, utility, ' \
+                                       'interconnection_point, proposed_online_date, current_online_date, feasibility_study, ' \
+                                       'system_impact_study_or_ph1, facility_study_or_ph2, optional_study, interconnection_study, ' \
+                                       f'ingestion_date, fuel_types, latitude, longitude, \'{status.capitalize()}\' as status'
+                        else:
+                            col_select = f"*, '{status.capitalize()}' as status"
                     queries.append(f"SELECT {col_select} FROM {table_name} {where_clause}")
 
                 query = ' UNION ALL '.join(queries)
@@ -466,7 +473,17 @@ class DataLoader:
                     cols_with_status = columns + [f"'{status}' as status"]
                     col_select = ', '.join(cols_with_status)
                 else:
-                    col_select = f"*, '{status}' as status"
+                    # For withdrawn_projects, we need to alias the study_process column
+                    if table == 'withdrawn':
+                        col_select = 'project_name, queue_position, request_receive_date, queue_date, application_status, ' \
+                                   '"Unnamed: 6_level_0 Study\nProcess" as study_process, ' \
+                                   'facility_type_1, facility_type_2, facility_type_3, fuel_type_1, fuel_type_2, fuel_type_3, ' \
+                                   'mw_1, mw_2, mw_3, net_mw, capacity_status, off_peak_deliverability, county, state, utility, ' \
+                                   'interconnection_point, proposed_online_date, current_online_date, feasibility_study, ' \
+                                   'system_impact_study_or_ph1, facility_study_or_ph2, optional_study, interconnection_study, ' \
+                                   f'ingestion_date, fuel_types, latitude, longitude, \'{status}\' as status'
+                    else:
+                        col_select = f"*, '{status}' as status"
                 query = f"SELECT {col_select} FROM {table_name} {where_clause}"
                 if study_processes:
                     params = study_processes
@@ -476,6 +493,8 @@ class DataLoader:
 
         except Exception as e:
             print(f"Error in get_all_projects: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             return pd.DataFrame()
         finally:
             if conn is not None:
