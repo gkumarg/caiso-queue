@@ -847,38 +847,46 @@ def main():
 
     # Get available study processes
     if loader:
-        study_processes = loader.get_study_processes()
+        try:
+            study_processes = loader.get_study_processes()
 
-        # Create helpful labels for study processes
-        study_process_labels = {}
-        for sp in study_processes:
-            if sp.startswith('C') and sp[1:].isdigit():
-                study_process_labels[sp] = f"{sp} (Cluster {sp[1:]})"
-            elif sp == 'Serial LGIP':
-                study_process_labels[sp] = f"{sp} (Standard LGIP)"
-            elif sp == 'TC':
-                study_process_labels[sp] = f"{sp} (Transition Cluster)"
-            elif sp == 'ISP':
-                study_process_labels[sp] = f"{sp} (Independent Study Process)"
-            elif sp == 'FT':
-                study_process_labels[sp] = f"{sp} (Fast Track)"
-            elif sp.startswith('SGIP'):
-                study_process_labels[sp] = f"{sp} (Small Generator)"
+            if not study_processes:
+                st.sidebar.warning("No study processes found in database")
+                st.session_state.study_process_filter = []
             else:
-                study_process_labels[sp] = sp
+                # Create helpful labels for study processes
+                study_process_labels = {}
+                for sp in study_processes:
+                    if sp.startswith('C') and len(sp) > 1 and sp[1:].isdigit():
+                        study_process_labels[sp] = f"{sp} (Cluster {sp[1:]})"
+                    elif sp == 'Serial LGIP':
+                        study_process_labels[sp] = f"{sp} (Standard LGIP)"
+                    elif sp == 'TC':
+                        study_process_labels[sp] = f"{sp} (Transition Cluster)"
+                    elif sp == 'ISP':
+                        study_process_labels[sp] = f"{sp} (Independent Study Process)"
+                    elif sp == 'FT':
+                        study_process_labels[sp] = f"{sp} (Fast Track)"
+                    elif sp.startswith('SGIP'):
+                        study_process_labels[sp] = f"{sp} (Small Generator)"
+                    else:
+                        study_process_labels[sp] = sp
 
-        # Study process multiselect
-        selected_study_processes = st.sidebar.multiselect(
-            "Filter by Study Cluster:",
-            options=study_processes,
-            default=[],
-            format_func=lambda x: study_process_labels.get(x, x),
-            help="Filter all data by study process/cluster. Leave empty to show all projects."
-        )
+                # Study process multiselect
+                selected_study_processes = st.sidebar.multiselect(
+                    "Filter by Study Cluster:",
+                    options=study_processes,
+                    default=[],
+                    format_func=lambda x: study_process_labels.get(x, x),
+                    help="Filter all data by study process/cluster. Leave empty to show all projects."
+                )
 
-        # Store in session state for access across functions
-        if 'study_process_filter' not in st.session_state or st.session_state.study_process_filter != selected_study_processes:
-            st.session_state.study_process_filter = selected_study_processes
+                # Store in session state for access across functions
+                if 'study_process_filter' not in st.session_state or st.session_state.study_process_filter != selected_study_processes:
+                    st.session_state.study_process_filter = selected_study_processes
+        except Exception as e:
+            st.sidebar.error(f"Error loading study processes: {str(e)}")
+            st.session_state.study_process_filter = []
     else:
         st.session_state.study_process_filter = []
     
