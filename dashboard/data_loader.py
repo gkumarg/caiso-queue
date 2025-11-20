@@ -79,11 +79,14 @@ class DataLoader:
         conn = self.get_conn()
 
         # Build WHERE clause if filtering
-        where_clause = ""
+        where_clause_active = ""
+        where_clause_withdrawn = ""
         params = []
         if study_processes:
             placeholders = ','.join(['?' for _ in study_processes])
-            where_clause = f"WHERE study_process IN ({placeholders})"
+            where_clause_active = f"WHERE study_process IN ({placeholders})"
+            # withdrawn_projects has different column name
+            where_clause_withdrawn = f'WHERE "Unnamed: 6_level_0 Study\nProcess" IN ({placeholders})'
             # Need to pass parameters 3 times (once for each table)
             params = study_processes * 3
 
@@ -94,7 +97,7 @@ class DataLoader:
                 COUNT(*) AS project_count,
                 SUM(net_mw) AS total_mw
             FROM grid_generation_queue
-            {where_clause}
+            {where_clause_active}
 
             UNION ALL
 
@@ -103,7 +106,7 @@ class DataLoader:
                 COUNT(*) AS project_count,
                 SUM(net_mw) AS total_mw
             FROM completed_projects
-            {where_clause}
+            {where_clause_active}
 
             UNION ALL
 
@@ -112,7 +115,7 @@ class DataLoader:
                 COUNT(*) AS project_count,
                 SUM(net_mw) AS total_mw
             FROM withdrawn_projects
-            {where_clause}
+            {where_clause_withdrawn}
             """, conn, params=params
         )
         conn.close()
@@ -168,28 +171,31 @@ class DataLoader:
         conn = self.get_conn()
 
         # Build WHERE clause if filtering
-        where_clause = ""
+        where_clause_active = ""
+        where_clause_withdrawn = ""
         params = []
         if study_processes:
             placeholders = ','.join(['?' for _ in study_processes])
-            where_clause = f"WHERE study_process IN ({placeholders})"
+            where_clause_active = f"WHERE study_process IN ({placeholders})"
+            # withdrawn_projects has different column name
+            where_clause_withdrawn = f'WHERE "Unnamed: 6_level_0 Study\nProcess" IN ({placeholders})'
             params = study_processes
 
         # Get active MW from active projects
         active = pd.read_sql(
-            f"SELECT SUM(net_mw) AS total_mw FROM grid_generation_queue {where_clause}",
+            f"SELECT SUM(net_mw) AS total_mw FROM grid_generation_queue {where_clause_active}",
             conn, params=params
         ).iloc[0,0] or 0
 
         # Get completed MW from completed projects
         completed = pd.read_sql(
-            f"SELECT SUM(net_mw) AS total_mw FROM completed_projects {where_clause}",
+            f"SELECT SUM(net_mw) AS total_mw FROM completed_projects {where_clause_active}",
             conn, params=params
         ).iloc[0,0] or 0
 
         # Get total MW from withdrawn projects
         withdrawn = pd.read_sql(
-            f"SELECT SUM(net_mw) AS withdrawn_mw FROM withdrawn_projects {where_clause}",
+            f"SELECT SUM(net_mw) AS withdrawn_mw FROM withdrawn_projects {where_clause_withdrawn}",
             conn, params=params
         ).iloc[0,0] or 0
 
@@ -415,27 +421,40 @@ class DataLoader:
                 'withdrawn': 'withdrawn_projects'
             }
 
-            # Determine column selection
-            col_select = '*' if not columns else ', '.join(columns)
-
             # Build WHERE clause if filtering by study process
-            where_clause = ""
+            where_clause_active = ""
+            where_clause_withdrawn = ""
             params = []
             if study_processes:
                 placeholders = ','.join(['?' for _ in study_processes])
-                where_clause = f"WHERE study_process IN ({placeholders})"
+                where_clause_active = f"WHERE study_process IN ({placeholders})"
+                # withdrawn_projects has different column name
+                where_clause_withdrawn = f'WHERE "Unnamed: 6_level_0 Study\nProcess" IN ({placeholders})'
 
             # Build query based on table selection
             if table == 'all':
                 # Get all projects from all tables with a status column
                 queries = []
                 for status, table_name in table_map.items():
+                    # Choose the correct WHERE clause based on table
+                    where_clause = where_clause_withdrawn if status == 'withdrawn' else where_clause_active
+
                     if columns:
                         # Add status column to selected columns
                         cols_with_status = columns + [f"'{status.capitalize()}' as status"]
                         col_select = ', '.join(cols_with_status)
                     else:
-                        col_select = f"*, '{status.capitalize()}' as status"
+                        # For withdrawn_projects, we need to alias the study_process column
+                        if status == 'withdrawn':
+                            col_select = 'project_name, queue_position, request_receive_date, queue_date, application_status, ' \
+                                       '"Unnamed: 6_level_0 Study\nProcess" as study_process, ' \
+                                       'facility_type_1, facility_type_2, facility_type_3, fuel_type_1, fuel_type_2, fuel_type_3, ' \
+                                       'mw_1, mw_2, mw_3, net_mw, capacity_status, off_peak_deliverability, county, state, utility, ' \
+                                       'interconnection_point, proposed_online_date, current_online_date, feasibility_study, ' \
+                                       'system_impact_study_or_ph1, facility_study_or_ph2, optional_study, interconnection_study, ' \
+                                       f'ingestion_date, fuel_types, latitude, longitude, \'{status.capitalize()}\' as status'
+                        else:
+                            col_select = f"*, '{status.capitalize()}' as status"
                     queries.append(f"SELECT {col_select} FROM {table_name} {where_clause}")
 
                 query = ' UNION ALL '.join(queries)
@@ -446,11 +465,25 @@ class DataLoader:
                 # Single table query
                 table_name = table_map.get(table, 'grid_generation_queue')
                 status = table.capitalize()
+
+                # Choose the correct WHERE clause based on table
+                where_clause = where_clause_withdrawn if table == 'withdrawn' else where_clause_active
+
                 if columns:
                     cols_with_status = columns + [f"'{status}' as status"]
                     col_select = ', '.join(cols_with_status)
                 else:
-                    col_select = f"*, '{status}' as status"
+                    # For withdrawn_projects, we need to alias the study_process column
+                    if table == 'withdrawn':
+                        col_select = 'project_name, queue_position, request_receive_date, queue_date, application_status, ' \
+                                   '"Unnamed: 6_level_0 Study\nProcess" as study_process, ' \
+                                   'facility_type_1, facility_type_2, facility_type_3, fuel_type_1, fuel_type_2, fuel_type_3, ' \
+                                   'mw_1, mw_2, mw_3, net_mw, capacity_status, off_peak_deliverability, county, state, utility, ' \
+                                   'interconnection_point, proposed_online_date, current_online_date, feasibility_study, ' \
+                                   'system_impact_study_or_ph1, facility_study_or_ph2, optional_study, interconnection_study, ' \
+                                   f'ingestion_date, fuel_types, latitude, longitude, \'{status}\' as status'
+                    else:
+                        col_select = f"*, '{status}' as status"
                 query = f"SELECT {col_select} FROM {table_name} {where_clause}"
                 if study_processes:
                     params = study_processes
@@ -460,6 +493,8 @@ class DataLoader:
 
         except Exception as e:
             print(f"Error in get_all_projects: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             return pd.DataFrame()
         finally:
             if conn is not None:
@@ -536,6 +571,7 @@ class DataLoader:
         conn = None
         try:
             conn = self.get_conn()
+            # Note: withdrawn_projects table has different column name
             query = """
                 SELECT DISTINCT study_process
                 FROM (
@@ -543,7 +579,8 @@ class DataLoader:
                     UNION
                     SELECT study_process FROM completed_projects
                     UNION
-                    SELECT study_process FROM withdrawn_projects
+                    SELECT "Unnamed: 6_level_0 Study
+Process" as study_process FROM withdrawn_projects
                 )
                 WHERE study_process IS NOT NULL
                 ORDER BY study_process
@@ -575,10 +612,13 @@ class DataLoader:
             conn = self.get_conn()
 
             # Build WHERE clause if filtering
-            where_clause = ""
+            where_clause_active = ""
+            where_clause_withdrawn = ""
             if study_processes:
                 placeholders = ','.join(['?' for _ in study_processes])
-                where_clause = f"WHERE study_process IN ({placeholders})"
+                where_clause_active = f"WHERE study_process IN ({placeholders})"
+                # withdrawn_projects has different column name
+                where_clause_withdrawn = f'WHERE "Unnamed: 6_level_0 Study\nProcess" IN ({placeholders})'
 
             # Query all tables
             query = f"""
@@ -587,11 +627,11 @@ class DataLoader:
                     COUNT(*) as project_count,
                     SUM(net_mw) as total_mw
                 FROM (
-                    SELECT study_process, net_mw FROM grid_generation_queue {where_clause}
+                    SELECT study_process, net_mw FROM grid_generation_queue {where_clause_active}
                     UNION ALL
-                    SELECT study_process, net_mw FROM completed_projects {where_clause}
+                    SELECT study_process, net_mw FROM completed_projects {where_clause_active}
                     UNION ALL
-                    SELECT study_process, net_mw FROM withdrawn_projects {where_clause}
+                    SELECT "Unnamed: 6_level_0 Study\nProcess" as study_process, net_mw FROM withdrawn_projects {where_clause_withdrawn}
                 )
                 WHERE study_process IS NOT NULL
                 GROUP BY study_process
@@ -600,7 +640,7 @@ class DataLoader:
 
             # Execute query with parameters if filtering
             if study_processes:
-                # Need to pass parameters twice (once for each table)
+                # Need to pass parameters 3 times (once for each table)
                 params = study_processes * 3
                 df = pd.read_sql(query, conn, params=params)
             else:
