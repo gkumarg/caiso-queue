@@ -7,12 +7,37 @@ import os
 
 class DataLoader:
     """Handles data loading from the CAISO queue database"""
-    
-    def __init__(self, db_path='data/caiso_queue.db'):
-        """Initialize with the path to the SQLite database"""
+
+    def __init__(self, db_path=None):
+        """Initialize with the path to the SQLite database
+
+        Args:
+            db_path (str): Path to database. If None, will try to find it automatically.
+        """
+        if db_path is None:
+            # Try to find the database in common locations
+            possible_paths = [
+                'data/caiso_queue.db',  # Running from project root
+                '../data/caiso_queue.db',  # Running from dashboard/ directory
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'caiso_queue.db')  # Absolute path
+            ]
+
+            for path in possible_paths:
+                if os.path.exists(path):
+                    db_path = path
+                    print(f"DEBUG: Found database at: {os.path.abspath(path)}")
+                    break
+
+            if db_path is None:
+                raise FileNotFoundError(
+                    "Database file not found. Tried locations: " + ", ".join(possible_paths)
+                )
+
         self.db_path = db_path
         if not os.path.exists(db_path):
             raise FileNotFoundError(f"Database file not found at: {db_path}")
+        else:
+            print(f"DEBUG: Using database at: {os.path.abspath(db_path)}")
             
     def get_conn(self):
         """Get a database connection"""
