@@ -64,11 +64,14 @@ def create_overview():
     loader = get_data_loader()
     if not loader:
         return
-    
-    # Get key metrics
-    status_df = loader.project_count_by_status()
-    cancellation_df = loader.cancellation_rate()
-    lead_time_df = loader.average_lead_time()
+
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
+    # Get key metrics with study cluster filter applied
+    status_df = loader.project_count_by_status(study_processes=study_filter)
+    cancellation_df = loader.cancellation_rate(study_processes=study_filter)
+    lead_time_df = loader.average_lead_time(study_processes=study_filter)
     
     # Extract metrics
     active_count = status_df[status_df['status'] == 'Active']['project_count'].iloc[0]
@@ -137,9 +140,12 @@ def show_capacity_by_fuel():
     loader = get_data_loader()
     if not loader:
         return
-    
-    try:    
-        df = loader.capacity_by_fuel()
+
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
+    try:
+        df = loader.capacity_by_fuel(study_processes=study_filter)
         
         # Check if dataframe is empty or has the expected columns
         if df is None or df.empty or 'fuel' not in df.columns or 'total_mw' not in df.columns:
@@ -221,9 +227,12 @@ def show_project_status():
     loader = get_data_loader()
     if not loader:
         return
-    
+
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
     try:
-        df = loader.project_count_by_status()
+        df = loader.project_count_by_status(study_processes=study_filter)
         
         # Create visualizations
         st.subheader("Project Status")
@@ -268,9 +277,9 @@ def show_project_status():
         
         st.metric("Total Projects in Database", f"{total_projects:,}")
         st.metric("Total Capacity", format_mw(total_capacity))
-        
-        # Cancellation rate
-        cancellation_df = loader.cancellation_rate()
+
+        # Cancellation rate with study filter applied
+        cancellation_df = loader.cancellation_rate(study_processes=study_filter)
         rate = cancellation_df['cancellation_rate'].iloc[0]
         st.metric("Cancellation Rate", f"{rate:.1%}")
     except Exception as e:
@@ -281,9 +290,12 @@ def show_top_iso_zones():
     loader = get_data_loader()
     if not loader:
         return
-        
+
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
     try:
-        df = loader.top5_iso_zones()
+        df = loader.top5_iso_zones(study_processes=study_filter)
         
         # Check if dataframe is empty or has the expected columns
         if df is None or df.empty or 'iso_zone' not in df.columns or 'total_mw' not in df.columns:
@@ -328,9 +340,12 @@ def show_lead_time_analysis():
     loader = get_data_loader()
     if not loader:
         return
-    
-    try:    
-        lead_time_df = loader.average_lead_time()
+
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
+    try:
+        lead_time_df = loader.average_lead_time(study_processes=study_filter)
         avg_lead_time = lead_time_df['average_lead_time_days'].iloc[0]
         
         st.subheader("Interconnection Request Lead Time")
@@ -366,9 +381,12 @@ def show_timeline_delays():
     loader = get_data_loader()
     if not loader:
         return
-        
+
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
     try:
-        df = loader.timeline_delay_by_fuel()
+        df = loader.timeline_delay_by_fuel(study_processes=study_filter)
         
         # Check if dataframe is empty or has the expected columns
         if df is None or df.empty or 'fuel' not in df.columns or 'avg_delay_days' not in df.columns:
@@ -438,9 +456,12 @@ def show_top_projects():
     loader = get_data_loader()
     if not loader:
         return
-    
-    try:    
-        df = loader.top_projects_by_net_mw()
+
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
+    try:
+        df = loader.top_projects_by_net_mw(study_processes=study_filter)
         
         # Check if dataframe is empty or has the expected columns
         if df is None or df.empty or 'project_name' not in df.columns or 'net_mw' not in df.columns or 'fuel_types' not in df.columns:
@@ -634,8 +655,11 @@ def show_data_table():
     # Get data based on status filter
     status_key = status_filter.lower() if status_filter != 'All' else 'all'
 
+    # Get study process filter from session state
+    study_filter = st.session_state.get('study_process_filter', []) or None
+
     try:
-        df = loader.get_all_projects(table=status_key)
+        df = loader.get_all_projects(table=status_key, study_processes=study_filter)
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         st.info("Try clearing the cache and reloading the page.")
@@ -653,7 +677,7 @@ def show_data_table():
 
     # Important columns to show by default
     default_columns = [
-        'project_name', 'queue_position', 'county', 'state',
+        'project_name', 'queue_position', 'study_process', 'county', 'state',
         'fuel_types', 'net_mw', 'mw_1', 'status'
     ]
     # Filter to only columns that exist
@@ -806,16 +830,57 @@ def main():
         st.markdown(f"Data as of: **{formatted_date}**")
     else:
         st.markdown("Data as of: **Unavailable**")
-    
+
     # Sidebar
     st.sidebar.image("dashboard/gen_queue_img.png", width=200)
     st.sidebar.title("Dashboard Controls")
-    
+
     # Select KPI to display
     selected_kpi = st.sidebar.selectbox(
         "Select Dashboard:",
         options=KPI_OPTIONS
     )
+
+    # Study Cluster Filter
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Study Cluster Filter")
+
+    # Get available study processes
+    if loader:
+        study_processes = loader.get_study_processes()
+
+        # Create helpful labels for study processes
+        study_process_labels = {}
+        for sp in study_processes:
+            if sp.startswith('C') and sp[1:].isdigit():
+                study_process_labels[sp] = f"{sp} (Cluster {sp[1:]})"
+            elif sp == 'Serial LGIP':
+                study_process_labels[sp] = f"{sp} (Standard LGIP)"
+            elif sp == 'TC':
+                study_process_labels[sp] = f"{sp} (Transition Cluster)"
+            elif sp == 'ISP':
+                study_process_labels[sp] = f"{sp} (Independent Study Process)"
+            elif sp == 'FT':
+                study_process_labels[sp] = f"{sp} (Fast Track)"
+            elif sp.startswith('SGIP'):
+                study_process_labels[sp] = f"{sp} (Small Generator)"
+            else:
+                study_process_labels[sp] = sp
+
+        # Study process multiselect
+        selected_study_processes = st.sidebar.multiselect(
+            "Filter by Study Cluster:",
+            options=study_processes,
+            default=[],
+            format_func=lambda x: study_process_labels.get(x, x),
+            help="Filter all data by study process/cluster. Leave empty to show all projects."
+        )
+
+        # Store in session state for access across functions
+        if 'study_process_filter' not in st.session_state or st.session_state.study_process_filter != selected_study_processes:
+            st.session_state.study_process_filter = selected_study_processes
+    else:
+        st.session_state.study_process_filter = []
     
     # About section
     with st.sidebar.expander("About this Dashboard"):

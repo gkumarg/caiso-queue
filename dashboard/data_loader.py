@@ -18,203 +18,263 @@ class DataLoader:
         """Get a database connection"""
         return sqlite3.connect(self.db_path)
     
-    def capacity_by_fuel(self):
-        """Load capacity by fuel type data"""
-        try:
-            return pd.read_csv('reports/capacity_by_fuel.csv')
-        except FileNotFoundError:
-            conn = self.get_conn()
-            df = pd.read_sql(
-                """
-                SELECT fuel_types AS fuel, SUM(net_mw) AS total_mw
-                FROM grid_generation_queue
-                GROUP BY fuel_types
-                """, conn
-            )
-            conn.close()
-            return df
+    def capacity_by_fuel(self, study_processes=None):
+        """Load capacity by fuel type data
+
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+        """
+        conn = self.get_conn()
+
+        # Build WHERE clause if filtering
+        where_clause = ""
+        params = []
+        if study_processes:
+            placeholders = ','.join(['?' for _ in study_processes])
+            where_clause = f"WHERE study_process IN ({placeholders})"
+            params = study_processes
+
+        df = pd.read_sql(
+            f"""
+            SELECT fuel_types AS fuel, SUM(net_mw) AS total_mw
+            FROM grid_generation_queue
+            {where_clause}
+            GROUP BY fuel_types
+            """, conn, params=params
+        )
+        conn.close()
+        return df
     
-    def project_count_by_status(self):
-        """Load project count by status data"""
-        try:
-            return pd.read_csv('reports/project_count_by_status.csv')
-        except FileNotFoundError:
-            conn = self.get_conn()
-            df = pd.read_sql(
-                """
-                SELECT 
-                    'Active' as status,
-                    COUNT(*) AS project_count,
-                    SUM(net_mw) AS total_mw
-                FROM grid_generation_queue
-                
-                UNION ALL
-                
-                SELECT 
-                    'Completed' as status,
-                    COUNT(*) AS project_count,
-                    SUM(net_mw) AS total_mw
-                FROM completed_projects
-                
-                UNION ALL
-                
-                SELECT 
-                    'Withdrawn' as status,
-                    COUNT(*) AS project_count,
-                    SUM(net_mw) AS total_mw
-                FROM withdrawn_projects
-                """, conn
-            )
-            conn.close()
-            return df
+    def project_count_by_status(self, study_processes=None):
+        """Load project count by status data
+
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+        """
+        conn = self.get_conn()
+
+        # Build WHERE clause if filtering
+        where_clause = ""
+        params = []
+        if study_processes:
+            placeholders = ','.join(['?' for _ in study_processes])
+            where_clause = f"WHERE study_process IN ({placeholders})"
+            # Need to pass parameters 3 times (once for each table)
+            params = study_processes * 3
+
+        df = pd.read_sql(
+            f"""
+            SELECT
+                'Active' as status,
+                COUNT(*) AS project_count,
+                SUM(net_mw) AS total_mw
+            FROM grid_generation_queue
+            {where_clause}
+
+            UNION ALL
+
+            SELECT
+                'Completed' as status,
+                COUNT(*) AS project_count,
+                SUM(net_mw) AS total_mw
+            FROM completed_projects
+            {where_clause}
+
+            UNION ALL
+
+            SELECT
+                'Withdrawn' as status,
+                COUNT(*) AS project_count,
+                SUM(net_mw) AS total_mw
+            FROM withdrawn_projects
+            {where_clause}
+            """, conn, params=params
+        )
+        conn.close()
+        return df
     
-    def top5_iso_zones(self):
-        """Load top 5 ISO zones data"""
+    def top5_iso_zones(self, study_processes=None):
+        """Load top 5 ISO zones data
+
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+        """
         try:
-            # First try to read from CSV
-            try:
-                df = pd.read_csv('reports/top5_iso_zones.csv')
-                # Ensure the dataframe has the required columns
-                if 'iso_zone' in df.columns and 'total_mw' in df.columns:
-                    return df
-            except FileNotFoundError:
-                pass
-                
-            # If CSV read fails or has wrong format, query from database
+            # Build WHERE clause if filtering
+            where_clause = ""
+            params = []
+            if study_processes:
+                placeholders = ','.join(['?' for _ in study_processes])
+                where_clause = f"WHERE study_process IN ({placeholders})"
+                params = study_processes
+
+            # Query from database
             conn = self.get_conn()
             df = pd.read_sql(
-                """
+                f"""
                 SELECT pto_study_region AS iso_zone, SUM(net_mw) AS total_mw
                 FROM grid_generation_queue
+                {where_clause}
                 GROUP BY pto_study_region
                 ORDER BY total_mw DESC
                 LIMIT 5
-                """, conn
+                """, conn, params=params
             )
             conn.close()
-            
+
             # Validate the dataframe before returning
             if df is not None and not df.empty and 'iso_zone' in df.columns and 'total_mw' in df.columns:
                 return df
             else:
                 # Return an empty dataframe with the expected schema
                 return pd.DataFrame(columns=['iso_zone', 'total_mw'])
-                
+
         except Exception as e:
             print(f"Error in top5_iso_zones: {str(e)}")
             # Return an empty dataframe with the expected schema
             return pd.DataFrame(columns=['iso_zone', 'total_mw'])
     
-    def cancellation_rate(self):
-        """Load cancellation rate data"""
-        try:
-            return pd.read_csv('reports/cancellation_rate.csv')
-        except FileNotFoundError:
-            conn = self.get_conn()
-            # Get active MW from active projects
-            active = pd.read_sql(
-                "SELECT SUM(net_mw) AS total_mw FROM grid_generation_queue", 
-                conn
-            ).iloc[0,0] or 0
-            
-            # Get completed MW from completed projects
-            completed = pd.read_sql(
-                "SELECT SUM(net_mw) AS total_mw FROM completed_projects", 
-                conn
-            ).iloc[0,0] or 0
+    def cancellation_rate(self, study_processes=None):
+        """Load cancellation rate data
 
-            # Get total MW from withdrawn projects
-            withdrawn = pd.read_sql(
-                "SELECT SUM(net_mw) AS withdrawn_mw FROM withdrawn_projects", 
-                conn
-            ).iloc[0,0] or 0
-            
-            conn.close()
-            total = active + completed + withdrawn
-            rate = withdrawn / total if total else None
-            return pd.DataFrame([{'cancellation_rate': rate}])
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+        """
+        conn = self.get_conn()
+
+        # Build WHERE clause if filtering
+        where_clause = ""
+        params = []
+        if study_processes:
+            placeholders = ','.join(['?' for _ in study_processes])
+            where_clause = f"WHERE study_process IN ({placeholders})"
+            params = study_processes
+
+        # Get active MW from active projects
+        active = pd.read_sql(
+            f"SELECT SUM(net_mw) AS total_mw FROM grid_generation_queue {where_clause}",
+            conn, params=params
+        ).iloc[0,0] or 0
+
+        # Get completed MW from completed projects
+        completed = pd.read_sql(
+            f"SELECT SUM(net_mw) AS total_mw FROM completed_projects {where_clause}",
+            conn, params=params
+        ).iloc[0,0] or 0
+
+        # Get total MW from withdrawn projects
+        withdrawn = pd.read_sql(
+            f"SELECT SUM(net_mw) AS withdrawn_mw FROM withdrawn_projects {where_clause}",
+            conn, params=params
+        ).iloc[0,0] or 0
+
+        conn.close()
+        total = active + completed + withdrawn
+        rate = withdrawn / total if total else None
+        return pd.DataFrame([{'cancellation_rate': rate}])
     
-    def average_lead_time(self):
-        """Load average lead time data"""
-        try:
-            return pd.read_csv('reports/average_lead_time.csv')
-        except FileNotFoundError:
-            conn = self.get_conn()
-            df = pd.read_sql(
-                "SELECT queue_date AS Queue_Date, "
-                "request_receive_date AS Request_Received_Date "
-                "FROM grid_generation_queue "
-                "WHERE queue_date IS NOT NULL AND "
-                "request_receive_date IS NOT NULL", conn,
-                parse_dates=['Queue_Date','Request_Received_Date']
-            )
-            conn.close()
-            df['lead_time'] = (df['Queue_Date'] - df['Request_Received_Date']).dt.days
-            avg = df['lead_time'].mean()
-            return pd.DataFrame([{'average_lead_time_days': avg}])
+    def average_lead_time(self, study_processes=None):
+        """Load average lead time data
+
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+        """
+        conn = self.get_conn()
+
+        # Build WHERE clause if filtering
+        where_clause = "WHERE queue_date IS NOT NULL AND request_receive_date IS NOT NULL"
+        params = []
+        if study_processes:
+            placeholders = ','.join(['?' for _ in study_processes])
+            where_clause += f" AND study_process IN ({placeholders})"
+            params = study_processes
+
+        df = pd.read_sql(
+            f"SELECT queue_date AS Queue_Date, "
+            "request_receive_date AS Request_Received_Date "
+            f"FROM grid_generation_queue {where_clause}", conn,
+            parse_dates=['Queue_Date','Request_Received_Date'],
+            params=params
+        )
+        conn.close()
+        df['lead_time'] = (df['Queue_Date'] - df['Request_Received_Date']).dt.days
+        avg = df['lead_time'].mean()
+        return pd.DataFrame([{'average_lead_time_days': avg}])
     
-    def top_projects_by_net_mw(self):
-        """Load top projects by net MW data"""
-        try:
-            return pd.read_csv('reports/top_projects_by_net_mw.csv')
-        except FileNotFoundError:
-            conn = self.get_conn()
-            df = pd.read_sql(
-                """
-                SELECT 
-                    project_name,
-                    queue_position,
-                    net_mw,
-                    fuel_types,
-                    'Active' AS status,
-                    county,
-                    state
-                FROM grid_generation_queue
-                WHERE net_mw IS NOT NULL
-                GROUP BY project_name, queue_position
-                ORDER BY MAX(net_mw) DESC
-                LIMIT 10
-                """, conn            )
-            conn.close()
-            return df
+    def top_projects_by_net_mw(self, study_processes=None):
+        """Load top projects by net MW data
+
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+        """
+        conn = self.get_conn()
+
+        # Build WHERE clause if filtering
+        where_clause = "WHERE net_mw IS NOT NULL"
+        params = []
+        if study_processes:
+            placeholders = ','.join(['?' for _ in study_processes])
+            where_clause += f" AND study_process IN ({placeholders})"
+            params = study_processes
+
+        df = pd.read_sql(
+            f"""
+            SELECT
+                project_name,
+                queue_position,
+                net_mw,
+                fuel_types,
+                study_process,
+                'Active' AS status,
+                county,
+                state
+            FROM grid_generation_queue
+            {where_clause}
+            GROUP BY project_name, queue_position
+            ORDER BY MAX(net_mw) DESC
+            LIMIT 10
+            """, conn, params=params
+        )
+        conn.close()
+        return df
     
-    def timeline_delay_by_fuel(self):
-        """Load timeline delay by fuel data"""
-        try:
-            df = pd.read_csv('reports/timeline_delay_by_fuel.csv')
-            # Rename columns to match what the dashboard expects
-            if 'fuel_type' in df.columns and 'average_delay_days' in df.columns:
-                df = df.rename(columns={
-                    'fuel_type': 'fuel',
-                    'average_delay_days': 'avg_delay_days'
-                })
-            return df
-        except FileNotFoundError:
-            conn = self.get_conn()
-            df = pd.read_sql(
-                """
+    def timeline_delay_by_fuel(self, study_processes=None):
+        """Load timeline delay by fuel data
+
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+        """
+        conn = self.get_conn()
+
+        # Build WHERE clause if filtering
+        where_clause = "WHERE actual_online_date IS NOT NULL AND planned_online_date IS NOT NULL AND actual_online_date > planned_online_date"
+        params = []
+        if study_processes:
+            placeholders = ','.join(['?' for _ in study_processes])
+            where_clause += f" AND study_process IN ({placeholders})"
+            params = study_processes
+
+        df = pd.read_sql(
+            f"""
+            SELECT
+                fuel_types AS fuel,
+                AVG(timeline_delay) AS avg_delay_days
+            FROM (
                 SELECT
-                    fuel_types AS fuel,
-                    AVG(timeline_delay) AS avg_delay_days
-                FROM (
-                    SELECT
-                        fuel_types,
-                        (
-                            julianday(actual_online_date) - 
-                            julianday(planned_online_date)
-                        ) AS timeline_delay
-                    FROM grid_generation_queue
-                    WHERE 
-                        actual_online_date IS NOT NULL AND
-                        planned_online_date IS NOT NULL AND
-                        actual_online_date > planned_online_date
-                )
-                GROUP BY fuel_types
-                ORDER BY avg_delay_days DESC
-                """, conn
+                    fuel_types,
+                    (
+                        julianday(actual_online_date) -
+                        julianday(planned_online_date)
+                    ) AS timeline_delay
+                FROM grid_generation_queue
+                {where_clause}
             )
-            conn.close()
-            return df
+            GROUP BY fuel_types
+            ORDER BY avg_delay_days DESC
+            """, conn, params=params
+        )
+        conn.close()
+        return df
     
     def get_active_projects(self):
         """Get all active projects data for filtering"""
@@ -308,12 +368,13 @@ class DataLoader:
             print(f"Error in get_project_locations: {str(e)}")
             return pd.DataFrame(columns=['project_name', 'county', 'state', 'capacity', 'latitude', 'longitude', 'status'])
 
-    def get_all_projects(self, table='all', columns=None):
+    def get_all_projects(self, table='all', columns=None, study_processes=None):
         """Get all projects data with optional table and column filtering
 
         Args:
             table (str): Which table to query ('active', 'completed', 'withdrawn', or 'all')
             columns (list): List of column names to select, or None for all columns
+            study_processes (list): Optional list of study processes to filter by
 
         Returns:
             pd.DataFrame: DataFrame with project data
@@ -332,6 +393,13 @@ class DataLoader:
             # Determine column selection
             col_select = '*' if not columns else ', '.join(columns)
 
+            # Build WHERE clause if filtering by study process
+            where_clause = ""
+            params = []
+            if study_processes:
+                placeholders = ','.join(['?' for _ in study_processes])
+                where_clause = f"WHERE study_process IN ({placeholders})"
+
             # Build query based on table selection
             if table == 'all':
                 # Get all projects from all tables with a status column
@@ -343,9 +411,12 @@ class DataLoader:
                         col_select = ', '.join(cols_with_status)
                     else:
                         col_select = f"*, '{status.capitalize()}' as status"
-                    queries.append(f"SELECT {col_select} FROM {table_name}")
+                    queries.append(f"SELECT {col_select} FROM {table_name} {where_clause}")
 
                 query = ' UNION ALL '.join(queries)
+                # Parameters need to be repeated for each UNION
+                if study_processes:
+                    params = study_processes * len(table_map)
             else:
                 # Single table query
                 table_name = table_map.get(table, 'grid_generation_queue')
@@ -355,9 +426,11 @@ class DataLoader:
                     col_select = ', '.join(cols_with_status)
                 else:
                     col_select = f"*, '{status}' as status"
-                query = f"SELECT {col_select} FROM {table_name}"
+                query = f"SELECT {col_select} FROM {table_name} {where_clause}"
+                if study_processes:
+                    params = study_processes
 
-            df = pd.read_sql(query, conn)
+            df = pd.read_sql(query, conn, params=params)
             return df
 
         except Exception as e:
@@ -425,6 +498,89 @@ class DataLoader:
         except Exception as e:
             print(f"Error getting latest ingestion date: {str(e)}")
             return None
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def get_study_processes(self):
+        """Get list of distinct study process values across all tables
+
+        Returns:
+            list: Sorted list of unique study process values
+        """
+        conn = None
+        try:
+            conn = self.get_conn()
+            query = """
+                SELECT DISTINCT study_process
+                FROM (
+                    SELECT study_process FROM grid_generation_queue
+                    UNION
+                    SELECT study_process FROM completed_projects
+                    UNION
+                    SELECT study_process FROM withdrawn_projects
+                )
+                WHERE study_process IS NOT NULL
+                ORDER BY study_process
+            """
+            df = pd.read_sql(query, conn)
+            return df['study_process'].tolist()
+        except Exception as e:
+            print(f"Error getting study processes: {str(e)}")
+            return []
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def get_study_process_summary(self, study_processes=None):
+        """Get summary statistics by study process
+
+        Args:
+            study_processes (list): Optional list of study processes to filter by
+
+        Returns:
+            pd.DataFrame: Summary with columns [study_process, project_count, total_mw]
+        """
+        conn = None
+        try:
+            conn = self.get_conn()
+
+            # Build WHERE clause if filtering
+            where_clause = ""
+            if study_processes:
+                placeholders = ','.join(['?' for _ in study_processes])
+                where_clause = f"WHERE study_process IN ({placeholders})"
+
+            # Query all tables
+            query = f"""
+                SELECT
+                    study_process,
+                    COUNT(*) as project_count,
+                    SUM(net_mw) as total_mw
+                FROM (
+                    SELECT study_process, net_mw FROM grid_generation_queue {where_clause}
+                    UNION ALL
+                    SELECT study_process, net_mw FROM completed_projects {where_clause}
+                    UNION ALL
+                    SELECT study_process, net_mw FROM withdrawn_projects {where_clause}
+                )
+                WHERE study_process IS NOT NULL
+                GROUP BY study_process
+                ORDER BY project_count DESC
+            """
+
+            # Execute query with parameters if filtering
+            if study_processes:
+                # Need to pass parameters twice (once for each table)
+                params = study_processes * 3
+                df = pd.read_sql(query, conn, params=params)
+            else:
+                df = pd.read_sql(query, conn)
+
+            return df
+        except Exception as e:
+            print(f"Error getting study process summary: {str(e)}")
+            return pd.DataFrame(columns=['study_process', 'project_count', 'total_mw'])
         finally:
             if conn is not None:
                 conn.close()
