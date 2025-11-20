@@ -524,9 +524,13 @@ class DataLoader:
                 ORDER BY study_process
             """
             df = pd.read_sql(query, conn)
-            return df['study_process'].tolist()
+            result = df['study_process'].tolist()
+            print(f"DEBUG: Found {len(result)} study processes: {result}")
+            return result
         except Exception as e:
+            import traceback
             print(f"Error getting study processes: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
             return []
         finally:
             if conn is not None:
