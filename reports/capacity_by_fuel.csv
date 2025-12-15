@@ -1,5 +1,6 @@
 fuel,total_mw
-Battery,33569.328532
+Battery,33469.328532
+Battery/Battery,52.0
 Battery/Other,108.0
 Battery/Solar,24316.8494
 Battery/Wind Turbine,811.7529999999999
@@ -13,5 +14,6 @@ Solar,1233.92
 Solar/Battery,22490.321047
 Water,5.0
 Wind Turbine,3474.044
-Wind Turbine/Battery,1394.84
+Wind Turbine/Battery,794.84
+Wind Turbine/Battery/Battery,600.0
 Wind Turbine/Solar/Battery,408.8
