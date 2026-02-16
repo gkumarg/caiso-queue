@@ -1,5 +1,5 @@
 fuel_type,average_delay_days
-Battery,2186.1746031746034
+Battery,2192.944
 Battery/Battery,3076.0
 Battery/Other,2587.0
 Battery/Solar,1673.047619047619
@@ -15,5 +15,5 @@ Solar/Battery,2355.8571428571427
 Water,4883.5
 Wind Turbine,2129.75
 Wind Turbine/Battery,5685.571428571428
-Wind Turbine/Battery/Battery,5634.0
+Wind Turbine/Battery/Battery,6029.0
 Wind Turbine/Solar/Battery,1242.0
