@@ -15,6 +15,7 @@ __pycache__/
 .idea/
 *.swp
 *.swo
+.coverage
 
 # Logs
 logs/
@@ -37,3 +38,5 @@ logs/
 .DS_Store
 Thumbs.db
 nul
+
+.claude/
