@@ -1,8 +1,8 @@
 fuel,total_mw
-Battery,25429.885838
+Battery,25049.885918
 Battery/Battery,433.8095
 Battery/Other,108.0
-Battery/Solar,21630.3734
+Battery/Solar,21545.3877
 Battery/Wind Turbine,811.7529999999999
 Geothermal,53.0
 Geothermal/Battery,9.435
@@ -11,9 +11,9 @@ Natural Gas,675.7
 Natural Gas/Battery,458.1699966430664
 Pumped-Storage hydro,500.0
 Solar,794.83
-Solar/Battery,21077.819047
+Solar/Battery,19035.419047
 Water,5.0
-Wind Turbine,2868.044
+Wind Turbine,2774.044
 Wind Turbine/Battery,794.84
 Wind Turbine/Battery/Battery,600.0
 Wind Turbine/Solar/Battery,408.8
