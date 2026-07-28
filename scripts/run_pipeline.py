@@ -38,7 +38,7 @@ def run_pipeline():
     try:
         from parse_queue import main as parse_main
         parse_main()
-        print("Parsing and loading completed successfully")
+        print("Main queue parsing completed successfully")
     except Exception as e:
         print(f"Error parsing queue data: {str(e)}")
         sys.exit(1)

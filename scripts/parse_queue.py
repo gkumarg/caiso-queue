@@ -515,6 +515,82 @@ def main():
     finally:
         conn.close()
 
+def ingest_cluster15():
+    """
+    Parse and ingest the CAISO Cluster 15 Interconnection Requests Excel file
+    into the cluster_15_requests SQLite table.
+    """
+    ensure_dirs()
+
+    if not os.path.exists(CLUSTER15_RAW_FILE):
+        print(f"Cluster 15 file not found at {CLUSTER15_RAW_FILE}, skipping.")
+        return
+
+    print(f"Processing Cluster 15 file: {CLUSTER15_RAW_FILE}")
+
+    with pd.ExcelFile(CLUSTER15_RAW_FILE) as xl:
+        print(f"Cluster 15 sheets: {xl.sheet_names}")
+        df = xl.parse(sheet_name=0, header=0)
+    print(f"Cluster 15 loaded with {len(df)} rows")
+    df = parse_sheet(df)
+
+    queue_pos_col = 'queue_position'
+    if queue_pos_col in df.columns:
+        before = len(df)
+        df = df.dropna(subset=[queue_pos_col])
+        df = df[df[queue_pos_col].astype(str).str.strip() != '']
+        print(f"Dropped {before - len(df)} rows with empty Queue Position")
+
+    table = 'cluster_15_requests'
+    today = pd.to_datetime('today').date()
+    conn = sqlite3.connect(DB_FILE)
+
+    try:
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table,)
+        ).fetchone() is not None
+
+        if table_exists:
+            conn.execute(
+                f"DELETE FROM {table} WHERE ingestion_date = ?",
+                (today.strftime('%Y-%m-%d'),)
+            )
+            conn.commit()
+            print(f"Cleared today's existing records from {table}")
+
+            if queue_pos_col in df.columns:
+                queue_positions = df[queue_pos_col].dropna().unique().tolist()
+                for batch in [queue_positions[i:i+500] for i in range(0, len(queue_positions), 500)]:
+                    placeholders = ','.join(['?' for _ in batch])
+                    conn.execute(
+                        f"DELETE FROM {table} WHERE {queue_pos_col} IN ({placeholders})"
+                        f" AND ingestion_date < ?",
+                        (*batch, today.strftime('%Y-%m-%d'))
+                    )
+                conn.commit()
+
+        df.to_sql(table, conn, if_exists='append', index=False)
+        print(f"Wrote {len(df)} rows to {table}")
+
+        # Create indexes only on columns that exist in the table
+        existing_cols = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if 'queue_position' in existing_cols:
+            conn.execute(
+                f'CREATE INDEX IF NOT EXISTS idx_{table}_queue_position '
+                f'ON {table}(queue_position)'
+            )
+        if 'ingestion_date' in existing_cols:
+            conn.execute(
+                f'CREATE INDEX IF NOT EXISTS idx_{table}_ingestion_date '
+                f'ON {table}(ingestion_date)'
+            )
+        conn.commit()
+        print(f"Indexes created on {table}")
+    finally:
+        conn.close()
+
+
 if __name__ == '__main__':
     main() 
 

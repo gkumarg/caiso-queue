@@ -176,6 +176,65 @@ class TestDataCollection:
                     shutil.rmtree(mock_raw_dir)
 
 
+    def test_cluster15_url_is_defined(self):
+        """Test that CLUSTER15_URL constant is defined."""
+        from data_collection import CLUSTER15_URL
+        assert CLUSTER15_URL is not None
+        assert isinstance(CLUSTER15_URL, str)
+        assert CLUSTER15_URL.startswith('http')
+        assert '.xlsx' in CLUSTER15_URL
+        assert 'cluster-15' in CLUSTER15_URL
+
+    def test_cluster15_filename_is_defined(self):
+        """Test that CLUSTER15_FILENAME constant is defined."""
+        from data_collection import CLUSTER15_FILENAME
+        assert CLUSTER15_FILENAME == 'cluster-15-interconnection-requests'
+
+    @patch('data_collection.requests.get')
+    def test_download_cluster15_report_success(self, mock_get):
+        """Test successful download of Cluster 15 report."""
+        import tempfile, shutil as _shutil
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.raw = Mock()
+        mock_response.raw.decode_content = True
+        mock_response.raw.read = Mock(return_value=b'fake excel data')
+        mock_get.return_value = mock_response
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            with patch('data_collection.RAW_DIR', temp_dir):
+                from data_collection import download_cluster15_report
+                output_path = download_cluster15_report(force=True)
+                assert output_path is not None
+                assert 'cluster-15' in output_path
+                assert output_path.endswith('.xlsx')
+        finally:
+            _shutil.rmtree(temp_dir)
+
+    @patch('data_collection.requests.get')
+    def test_download_cluster15_skips_if_exists(self, mock_get):
+        """Test that download is skipped if today's file already exists."""
+        import tempfile, shutil as _shutil
+        from datetime import datetime
+        mock_get.return_value = Mock()
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            date_suffix = datetime.now().strftime("-%m%d%Y")
+            existing_file = os.path.join(temp_dir, f"cluster-15-interconnection-requests{date_suffix}.xlsx")
+            with open(existing_file, 'w') as f:
+                f.write('placeholder')
+
+            with patch('data_collection.RAW_DIR', temp_dir):
+                from data_collection import download_cluster15_report
+                result = download_cluster15_report(force=False)
+                mock_get.assert_not_called()
+                assert result == existing_file
+        finally:
+            _shutil.rmtree(temp_dir)
+
+
 @pytest.mark.network
 @pytest.mark.slow
 class TestDataCollectionLive:
