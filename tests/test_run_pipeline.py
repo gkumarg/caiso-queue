@@ -197,3 +197,22 @@ class TestPipelineComponents:
 
         assert any('Starting CAISO Queue pipeline' in call for call in print_calls)
         assert any('completed successfully' in call for call in print_calls)
+
+
+def test_pipeline_calls_cluster15_download(monkeypatch):
+    """Test that run_pipeline calls download_cluster15_report and ingest_cluster15."""
+    from unittest.mock import patch
+
+    calls = []
+
+    with patch('data_collection.download_queue_report', return_value='/fake/path.xlsx'), \
+         patch('data_collection.download_cluster15_report',
+               side_effect=lambda: calls.append('cluster15_download') or '/fake/cluster15.xlsx'), \
+         patch('parse_queue.main'), \
+         patch('parse_queue.ingest_cluster15',
+               side_effect=lambda: calls.append('cluster15_ingest')), \
+         patch('analyze_queue.main'):
+        run_pipeline()
+
+    assert 'cluster15_download' in calls, "download_cluster15_report was not called"
+    assert 'cluster15_ingest' in calls, "ingest_cluster15 was not called"

@@ -41,6 +41,7 @@ KPI_OPTIONS = [
     "Timeline Delays",
     "Top Projects",
     "Project Map",
+    "Cluster 15",
     "Data Table"
 ]
 
@@ -621,6 +622,64 @@ def show_project_map():
             hide_index=True
         )
 
+def create_cluster15_view():
+    """Create the Cluster 15 Interconnection Requests view."""
+    loader = get_data_loader()
+    if not loader:
+        return
+
+    st.header("Cluster 15 Interconnection Requests")
+    st.caption(
+        "Data sourced from CAISO's Cluster 15 Interconnection Requests publication. "
+        "This is a dedicated cluster study dataset separate from the weekly Public Queue Report."
+    )
+
+    summary = loader.get_cluster15_summary()
+
+    if summary['total_projects'] == 0:
+        st.warning(
+            "No Cluster 15 data found in the database. "
+            "Run the pipeline to download and ingest the Cluster 15 file."
+        )
+        return
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Cluster 15 Projects", f"{summary['total_projects']:,}")
+    with col2:
+        mw = summary['total_mw']
+        st.metric("Cluster 15 Total Capacity", format_mw(mw) if mw else "N/A")
+
+    st.divider()
+
+    fuel_df = loader.get_cluster15_capacity_by_fuel()
+    if not fuel_df.empty:
+        st.subheader("Capacity by Fuel Type")
+        fig = px.bar(
+            fuel_df,
+            x='fuel',
+            y='total_mw',
+            title="Cluster 15 — Capacity by Fuel Type",
+            labels={'fuel': 'Fuel Type', 'total_mw': 'Total MW'},
+            color='fuel'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    st.subheader("All Cluster 15 Projects")
+    projects_df = loader.get_cluster15_projects()
+    if not projects_df.empty:
+        display_cols = [c for c in [
+            'queue_position', 'project_name', 'fuel_types', 'net_mw',
+            'county', 'state', 'application_status', 'study_process',
+            'proposed_online_date', 'current_online_date'
+        ] if c in projects_df.columns]
+        st.dataframe(projects_df[display_cols], use_container_width=True)
+    else:
+        st.info("No project records available.")
+
+
 def show_data_table():
     """Show interactive data table with filtering capabilities"""
     loader = get_data_loader()
@@ -928,6 +987,8 @@ def main():
         show_top_projects()
     elif selected_kpi == "Project Map":
         show_project_map()
+    elif selected_kpi == "Cluster 15":
+        create_cluster15_view()
     elif selected_kpi == "Data Table":
         show_data_table()
 

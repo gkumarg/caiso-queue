@@ -243,3 +243,75 @@ class TestParseQueueIntegration:
 
         assert len(duplicates) > 0
         assert 'Z001' in duplicates['queue_position'].values
+
+
+@pytest.mark.unit
+class TestCluster15Parsing:
+    """Tests for Cluster 15 data ingestion into SQLite."""
+
+    def test_parse_cluster15_creates_table(self, temp_db):
+        """Test that parsing Cluster 15 data creates the cluster_15_requests table."""
+        import sqlite3
+        conn = sqlite3.connect(temp_db)
+
+        sample_df = pd.DataFrame({
+            'project_name': ['Solar C15-001', 'Wind C15-002'],
+            'queue_position': ['C15-001', 'C15-002'],
+            'net_mw': [150.0, 300.0],
+            'fuel_types': ['Solar', 'Wind'],
+            'county': ['KERN', 'RIVERSIDE'],
+            'state': ['CA', 'CA'],
+            'ingestion_date': ['2026-03-23', '2026-03-23'],
+            'latitude': [35.3425, 33.9534],
+            'longitude': [-118.7299, -117.3962],
+        })
+        sample_df.to_sql('cluster_15_requests', conn, if_exists='replace', index=False)
+
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()]
+        assert 'cluster_15_requests' in tables
+        count = conn.execute("SELECT COUNT(*) FROM cluster_15_requests").fetchone()[0]
+        assert count == 2
+        conn.close()
+
+    def test_ingest_cluster15_function_exists(self):
+        """Test that ingest_cluster15 function exists in parse_queue."""
+        from parse_queue import ingest_cluster15
+        assert callable(ingest_cluster15)
+
+    def test_ingest_cluster15_idempotent(self, temp_db):
+        """Test that running ingest twice on same date does not duplicate rows."""
+        import sqlite3
+        from unittest.mock import patch
+        import tempfile
+
+        sample_data = pd.DataFrame({
+            'Project Name': ['Solar C15-001'],
+            'Queue Position': ['C15-001'],
+            'Net MWs to Grid': [150.0],
+            'Fuel-1': ['Solar'],
+            'County': ['KERN'],
+            'State': ['CA'],
+        })
+
+        temp_xlsx = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+        temp_xlsx.close()
+        sample_data.to_excel(temp_xlsx.name, index=False)
+
+        try:
+            with patch('parse_queue.CLUSTER15_RAW_FILE', temp_xlsx.name), \
+                 patch('parse_queue.DB_FILE', temp_db):
+                from parse_queue import ingest_cluster15
+                ingest_cluster15()
+                ingest_cluster15()  # Run twice
+
+            conn = sqlite3.connect(temp_db)
+            count = conn.execute(
+                "SELECT COUNT(*) FROM cluster_15_requests"
+            ).fetchone()[0]
+            conn.close()
+            assert count == 1, f"Expected 1 row after idempotent run, got {count}"
+        finally:
+            import os as _os
+            _os.unlink(temp_xlsx.name)
