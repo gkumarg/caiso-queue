@@ -2,9 +2,10 @@ import pandas as pd
 import sqlite3
 import os
 from datetime import date
-from column_mapping import get_column_mapping, map_dataframe_columns
+from column_mapping import get_column_mapping, map_dataframe_columns, get_cluster15_column_mapping
 
 RAW_FILE = 'raw/publicqueuereport.xlsx'
+CLUSTER15_RAW_FILE = 'raw/cluster-15-interconnection-requests.xlsx'
 DB_FILE  = 'data/caiso_queue.db'
 
 # Import column mapping from the central configuration
@@ -516,3 +517,140 @@ def main():
 
 if __name__ == '__main__':
     main() 
+
+
+def ingest_cluster15():
+    """
+    Parse and ingest the CAISO Cluster 15 Interconnection Requests Excel file
+    into the cluster_15_requests SQLite table.
+
+    The Cluster 15 file uses single-level headers (header=0) and has two sheets:
+    'Cluster 15 ' (active) and 'Withdrawn'.
+    """
+    ensure_dirs()
+
+    if not os.path.exists(CLUSTER15_RAW_FILE):
+        print(f"Cluster 15 file not found at {CLUSTER15_RAW_FILE}, skipping.")
+        return
+
+    print(f"Processing Cluster 15 file: {CLUSTER15_RAW_FILE}")
+
+    cluster15_col_mapping = get_cluster15_column_mapping()
+    conn = sqlite3.connect(DB_FILE)
+    today = pd.to_datetime('today').date()
+    table = 'cluster_15_requests'
+
+    try:
+        xl = pd.ExcelFile(CLUSTER15_RAW_FILE)
+        print(f"Cluster 15 sheets: {xl.sheet_names}")
+
+        sheet_status_map = {
+            'Cluster 15 ': 'Active',
+            'Cluster 15': 'Active',
+            'Withdrawn': 'Withdrawn',
+        }
+
+        all_frames = []
+        for sheet_name in xl.sheet_names:
+            if sheet_name not in sheet_status_map:
+                print(f"Skipping unknown sheet: {sheet_name}")
+                continue
+
+            df = xl.parse(sheet_name, header=0, engine='openpyxl')
+            print(f"Sheet '{sheet_name}' loaded with {len(df)} rows")
+
+            # Map columns
+            df = df.rename(columns={c: cluster15_col_mapping.get(c, c) for c in df.columns})
+
+            # Add metadata
+            df['study_process'] = 'C15'
+            df['application_status'] = sheet_status_map[sheet_name]
+            df['ingestion_date'] = today
+
+            # Derive combined fuel_types
+            fuel_cols = [c for c in df.columns if c.startswith('fuel_type_')]
+            if fuel_cols:
+                df['fuel_types'] = (
+                    df[fuel_cols].fillna('').apply(
+                        lambda row: '/'.join(f for f in row if f), axis=1
+                    )
+                )
+            else:
+                df['fuel_types'] = ''
+
+            # Add coordinates
+            df['latitude'] = None
+            df['longitude'] = None
+            county_col = next((c for c in df.columns if c == 'county'), None)
+            state_col = next((c for c in df.columns if c == 'state'), None)
+            if county_col and state_col:
+                for _, row in df[[county_col, state_col]].drop_duplicates().iterrows():
+                    lat, lon = get_county_coordinates(row[county_col], row[state_col])
+                    if lat is not None:
+                        mask = (df[county_col] == row[county_col]) & (df[state_col] == row[state_col])
+                        df.loc[mask, 'latitude'] = float(lat)
+                        df.loc[mask, 'longitude'] = float(lon)
+
+            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+
+            # Drop rows with no queue position
+            if 'queue_position' in df.columns:
+                before = len(df)
+                df = df.dropna(subset=['queue_position'])
+                df = df[df['queue_position'].astype(str).str.strip() != '']
+                dropped = before - len(df)
+                if dropped:
+                    print(f"Dropped {dropped} rows with empty Queue Position in '{sheet_name}'")
+
+            all_frames.append(df)
+
+        if not all_frames:
+            print("No data to ingest for Cluster 15.")
+            return
+
+        df_all = pd.concat(all_frames, ignore_index=True)
+        print(f"Total Cluster 15 rows across all sheets: {len(df_all)}")
+
+        # Idempotency: remove today's records then write fresh
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table,)
+        ).fetchone() is not None
+
+        if table_exists:
+            conn.execute(
+                f"DELETE FROM {table} WHERE ingestion_date = ?",
+                (today.strftime('%Y-%m-%d'),)
+            )
+            conn.commit()
+            # Remove older records for same queue positions
+            if 'queue_position' in df_all.columns:
+                queue_positions = df_all['queue_position'].dropna().unique().tolist()
+                for batch in [queue_positions[i:i+500] for i in range(0, len(queue_positions), 500)]:
+                    placeholders = ','.join(['?' for _ in batch])
+                    conn.execute(
+                        f"DELETE FROM {table} WHERE queue_position IN ({placeholders})"
+                        f" AND ingestion_date < ?",
+                        (*batch, today.strftime('%Y-%m-%d'))
+                    )
+                conn.commit()
+
+        df_all.to_sql(table, conn, if_exists='append', index=False)
+        print(f"Wrote {len(df_all)} rows to {table}")
+
+        conn.execute(
+            f'CREATE INDEX IF NOT EXISTS idx_{table}_queue_position ON {table}(queue_position)'
+        )
+        conn.execute(
+            f'CREATE INDEX IF NOT EXISTS idx_{table}_ingestion_date ON {table}(ingestion_date)'
+        )
+        conn.commit()
+        print(f"Indexes created on {table}")
+
+    except Exception as e:
+        import traceback
+        print(f"Error ingesting Cluster 15 data: {str(e)}")
+        print(traceback.format_exc())
+    finally:
+        conn.close()

@@ -12,8 +12,8 @@ from datetime import datetime
 
 def run_pipeline():
     print(f"Starting CAISO Queue pipeline at {datetime.now()}")
-    
-    # Step 1: Download latest data
+
+    # Step 1a: Download latest main queue report
     print("\n=== Downloading latest queue report ===")
     try:
         from data_collection import download_queue_report
@@ -21,7 +21,19 @@ def run_pipeline():
         print(f"Download successful: {latest_file}")
     except Exception as e:
         print(f"Error downloading queue report: {str(e)}")
-        sys.exit(1)    # Step 2: Parse and load data
+        sys.exit(1)
+
+    # Step 1b: Download Cluster 15 report
+    print("\n=== Downloading Cluster 15 report ===")
+    try:
+        from data_collection import download_cluster15_report
+        cluster15_file = download_cluster15_report()
+        print(f"Cluster 15 download successful: {cluster15_file}")
+    except Exception as e:
+        print(f"Error downloading Cluster 15 report: {str(e)}")
+        sys.exit(1)
+
+    # Step 2a: Parse and load main queue data
     print("\n=== Parsing and loading data ===")
     try:
         from parse_queue import main as parse_main
@@ -30,7 +42,17 @@ def run_pipeline():
     except Exception as e:
         print(f"Error parsing queue data: {str(e)}")
         sys.exit(1)
-        
+
+    # Step 2b: Parse and load Cluster 15 data
+    print("\n=== Parsing and loading Cluster 15 data ===")
+    try:
+        from parse_queue import ingest_cluster15
+        ingest_cluster15()
+        print("Cluster 15 parsing completed successfully")
+    except Exception as e:
+        print(f"Error parsing Cluster 15 data: {str(e)}")
+        sys.exit(1)
+
     # Step 3: Analyze data and generate reports
     print("\n=== Analyzing data and generating reports ===")
     try:

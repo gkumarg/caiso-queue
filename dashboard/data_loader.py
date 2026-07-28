@@ -543,7 +543,8 @@ class DataLoader:
             tables = [
                 'grid_generation_queue',
                 'completed_projects',
-                'withdrawn_projects'
+                'withdrawn_projects',
+                'cluster_15_requests'
             ]
             latest_dates = []
             for table in tables:
@@ -681,6 +682,75 @@ Process" as study_process FROM withdrawn_projects
         except Exception as e:
             print(f"Error getting study process summary: {str(e)}")
             return pd.DataFrame(columns=['study_process', 'project_count', 'total_mw'])
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def get_cluster15_projects(self):
+        """Get all Cluster 15 interconnection request projects."""
+        conn = None
+        try:
+            conn = self.get_conn()
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='cluster_15_requests'"
+            ).fetchone()
+            if not exists:
+                return pd.DataFrame()
+            return pd.read_sql("SELECT * FROM cluster_15_requests", conn)
+        except Exception as e:
+            print(f"Error in get_cluster15_projects: {str(e)}")
+            return pd.DataFrame()
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def get_cluster15_summary(self):
+        """Get summary statistics for Cluster 15 projects.
+
+        Returns:
+            dict with keys: total_projects, total_mw
+        """
+        conn = None
+        try:
+            conn = self.get_conn()
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='cluster_15_requests'"
+            ).fetchone()
+            if not exists:
+                return {'total_projects': 0, 'total_mw': 0.0}
+            row = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(net_mw), 0) FROM cluster_15_requests"
+            ).fetchone()
+            return {'total_projects': row[0], 'total_mw': row[1]}
+        except Exception as e:
+            print(f"Error in get_cluster15_summary: {str(e)}")
+            return {'total_projects': 0, 'total_mw': 0.0}
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def get_cluster15_capacity_by_fuel(self):
+        """Get Cluster 15 capacity broken down by fuel type."""
+        conn = None
+        try:
+            conn = self.get_conn()
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='cluster_15_requests'"
+            ).fetchone()
+            if not exists:
+                return pd.DataFrame(columns=['fuel', 'total_mw'])
+            df = pd.read_sql(
+                """
+                SELECT fuel_types AS fuel, SUM(net_mw) AS total_mw
+                FROM cluster_15_requests
+                GROUP BY fuel_types
+                ORDER BY total_mw DESC
+                """, conn
+            )
+            return df
+        except Exception as e:
+            print(f"Error in get_cluster15_capacity_by_fuel: {str(e)}")
+            return pd.DataFrame(columns=['fuel', 'total_mw'])
         finally:
             if conn is not None:
                 conn.close()
