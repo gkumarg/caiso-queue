@@ -34,7 +34,7 @@ def run_pipeline():
         sys.exit(1)
 
     # Step 2a: Parse and load main queue data
-    print("\n=== Parsing and loading main queue data ===")
+    print("\n=== Parsing and loading data ===")
     try:
         from parse_queue import main as parse_main
         parse_main()

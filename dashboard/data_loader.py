@@ -4,6 +4,15 @@ Data loading utilities for the CAISO Generator Interconnection Queue Dashboard
 import sqlite3
 import pandas as pd
 import os
+import re
+
+
+def _study_process_sort_key(study_process):
+    """Sort cluster codes numerically (C01, C14, C15) before other process values."""
+    match = re.fullmatch(r"C0*(\d+)", study_process)
+    if match:
+        return (0, int(match.group(1)), study_process)
+    return (1, study_process)
 
 class DataLoader:
     """Handles data loading from the CAISO queue database"""
@@ -95,7 +104,7 @@ class DataLoader:
             SELECT
                 'Active' as status,
                 COUNT(*) AS project_count,
-                SUM(net_mw) AS total_mw
+                COALESCE(SUM(net_mw), 0) AS total_mw
             FROM grid_generation_queue
             {where_clause_active}
 
@@ -104,7 +113,7 @@ class DataLoader:
             SELECT
                 'Completed' as status,
                 COUNT(*) AS project_count,
-                SUM(net_mw) AS total_mw
+                COALESCE(SUM(net_mw), 0) AS total_mw
             FROM completed_projects
             {where_clause_active}
 
@@ -113,7 +122,7 @@ class DataLoader:
             SELECT
                 'Withdrawn' as status,
                 COUNT(*) AS project_count,
-                SUM(net_mw) AS total_mw
+                COALESCE(SUM(net_mw), 0) AS total_mw
             FROM withdrawn_projects
             {where_clause_withdrawn}
             """, conn, params=params
@@ -201,7 +210,7 @@ class DataLoader:
 
         conn.close()
         total = active + completed + withdrawn
-        rate = withdrawn / total if total else None
+        rate = withdrawn / total if total else 0
         return pd.DataFrame([{'cancellation_rate': rate}])
     
     def average_lead_time(self, study_processes=None):
@@ -228,8 +237,12 @@ class DataLoader:
             params=params
         )
         conn.close()
+        if df.empty:
+            return pd.DataFrame([{'average_lead_time_days': 0}])
         df['lead_time'] = (df['Queue_Date'] - df['Request_Received_Date']).dt.days
         avg = df['lead_time'].mean()
+        if pd.isna(avg):
+            avg = 0
         return pd.DataFrame([{'average_lead_time_days': avg}])
     
     def top_projects_by_net_mw(self, study_processes=None):
@@ -584,10 +597,28 @@ class DataLoader:
 Process" as study_process FROM withdrawn_projects
                 )
                 WHERE study_process IS NOT NULL
-                ORDER BY study_process
             """
             df = pd.read_sql(query, conn)
-            result = df['study_process'].tolist()
+            raw_values = [value for value in df['study_process'].tolist() if value is not None]
+            result = []
+            seen = set()
+            for value in raw_values:
+                normalized = str(value).strip()
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                result.append(normalized)
+
+            # Keep cluster filters current: if data currently tops out at C14, include C15 for next cycle.
+            cluster_numbers = []
+            for value in result:
+                cluster_match = re.fullmatch(r"C0*(\d+)", value)
+                if cluster_match:
+                    cluster_numbers.append(int(cluster_match.group(1)))
+            if cluster_numbers and max(cluster_numbers) >= 14 and "C15" not in seen:
+                result.append("C15")
+
+            result.sort(key=_study_process_sort_key)
             print(f"DEBUG: Found {len(result)} study processes: {result}")
             return result
         except Exception as e:
@@ -660,13 +691,12 @@ Process" as study_process FROM withdrawn_projects
         conn = None
         try:
             conn = self.get_conn()
-            table_exists = conn.execute(
+            exists = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='cluster_15_requests'"
             ).fetchone()
-            if not table_exists:
+            if not exists:
                 return pd.DataFrame()
-            df = pd.read_sql("SELECT * FROM cluster_15_requests", conn)
-            return df
+            return pd.read_sql("SELECT * FROM cluster_15_requests", conn)
         except Exception as e:
             print(f"Error in get_cluster15_projects: {str(e)}")
             return pd.DataFrame()
@@ -683,10 +713,10 @@ Process" as study_process FROM withdrawn_projects
         conn = None
         try:
             conn = self.get_conn()
-            table_exists = conn.execute(
+            exists = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='cluster_15_requests'"
             ).fetchone()
-            if not table_exists:
+            if not exists:
                 return {'total_projects': 0, 'total_mw': 0.0}
             row = conn.execute(
                 "SELECT COUNT(*), COALESCE(SUM(net_mw), 0) FROM cluster_15_requests"
@@ -704,10 +734,10 @@ Process" as study_process FROM withdrawn_projects
         conn = None
         try:
             conn = self.get_conn()
-            table_exists = conn.execute(
+            exists = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='cluster_15_requests'"
             ).fetchone()
-            if not table_exists:
+            if not exists:
                 return pd.DataFrame(columns=['fuel', 'total_mw'])
             df = pd.read_sql(
                 """

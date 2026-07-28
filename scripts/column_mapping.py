@@ -58,11 +58,46 @@ COLUMN_MAPPING = {
     'fuel_types': 'fuel_types',
 }
 
+# Cluster 15 specific column mapping (single-level headers, different schema)
+CLUSTER15_COLUMN_MAPPING = {
+    'Queue Number': 'queue_position',
+    'Project Number': 'project_number',
+    'Project Name': 'project_name',
+    'Generation/Fuel 1': 'fuel_type_1',
+    'NET MW 1': 'mw_1',
+    'Generation/Fuel 2': 'fuel_type_2',
+    'NET MW 2': 'mw_2',
+    'Generation/Fuel 3': 'fuel_type_3',
+    'NET MW 3': 'mw_3',
+    'NET MW POI': 'net_mw',
+    'PROJECT COUNTY': 'county',
+    'Project State': 'state',
+    'Study Area': 'pto_study_region',
+    'PTO': 'utility',
+    'POI': 'interconnection_point',
+    'Voltage kV': 'voltage_kv',
+    'Requested COD': 'proposed_online_date',
+    'Queue Date ': 'queue_date',
+    'Queue Date': 'queue_date',
+    'Application Date': 'request_receive_date',
+    'Application Date ': 'request_receive_date',
+    'Withdrawal Date': 'withdrawal_date',
+    'Service Type': 'service_type',
+    'ingestion_date': 'ingestion_date',
+    'fuel_types': 'fuel_types',
+    'study_process': 'study_process',
+}
+
 def get_column_mapping():
     """
     Returns the standard column mapping dictionary.
     """
     return COLUMN_MAPPING
+
+
+def get_cluster15_column_mapping():
+    """Returns the Cluster 15 specific column mapping dictionary."""
+    return CLUSTER15_COLUMN_MAPPING
 
 def map_dataframe_columns(df):
     """

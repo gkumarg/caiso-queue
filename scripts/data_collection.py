@@ -59,11 +59,12 @@ def download_queue_report():
         print(f"Error downloading file: {str(e)}")
         sys.exit(1)
 
+
 def download_cluster15_report(force=False):
     """
     Download the CAISO Cluster 15 Interconnection Requests Excel file.
-    If the dated file for today already exists and force=False, skip the download.
-    Returns the path to the downloaded (or existing) file.
+    If the dated file for today already exists and force=False, skips download.
+    Returns the path to the downloaded file.
     """
     os.makedirs(RAW_DIR, exist_ok=True)
 
@@ -74,6 +75,9 @@ def download_cluster15_report(force=False):
 
     if os.path.exists(output_path) and not force:
         print(f"Cluster 15 file for today already exists at {output_path}, skipping download.")
+        base_file = os.path.join(RAW_DIR, f"{CLUSTER15_FILENAME}.xlsx")
+        if not os.path.exists(base_file):
+            shutil.copy2(output_path, base_file)
         return output_path
 
     print(f"Downloading CAISO Cluster 15 report from {CLUSTER15_URL}")
