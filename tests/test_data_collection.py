@@ -10,7 +10,7 @@ import shutil
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from data_collection import download_queue_report, CAISO_URL, RAW_DIR
+from data_collection import download_queue_report, CAISO_URL, RAW_DIR, CLUSTER15_URL, CLUSTER15_FILENAME
 
 
 @pytest.mark.unit
@@ -191,3 +191,82 @@ class TestDataCollectionLive:
             assert response.status_code in [200, 302, 301]
         except requests.exceptions.RequestException:
             pytest.skip("CAISO website is not accessible or network is down")
+
+
+class TestCluster15DataCollection:
+    """Tests for Cluster 15 data collection."""
+
+    def test_cluster15_url_is_defined(self):
+        """Test that CLUSTER15_URL constant is defined."""
+        assert CLUSTER15_URL is not None
+        assert isinstance(CLUSTER15_URL, str)
+        assert CLUSTER15_URL.startswith('http')
+        assert '.xlsx' in CLUSTER15_URL
+        assert 'cluster-15' in CLUSTER15_URL
+
+    def test_cluster15_filename_is_defined(self):
+        """Test that CLUSTER15_FILENAME constant is defined."""
+        assert CLUSTER15_FILENAME == 'cluster-15-interconnection-requests'
+
+    @patch('data_collection.requests.get')
+    def test_download_cluster15_report_success(self, mock_get):
+        """Test successful download of Cluster 15 report."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.raw = Mock()
+        mock_response.raw.decode_content = True
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            with patch('data_collection.RAW_DIR', temp_dir):
+                from data_collection import download_cluster15_report
+                output_path = download_cluster15_report(force=True)
+                assert output_path is not None
+                assert 'cluster-15' in output_path
+                assert output_path.endswith('.xlsx')
+        finally:
+            shutil.rmtree(temp_dir)
+
+    @patch('data_collection.requests.get')
+    def test_download_cluster15_creates_latest_copy(self, mock_get):
+        """Test that download creates both dated and latest files."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.raw = Mock()
+        mock_response.raw.decode_content = True
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            with patch('data_collection.RAW_DIR', temp_dir):
+                from data_collection import download_cluster15_report
+                download_cluster15_report(force=True)
+                files = os.listdir(temp_dir)
+                latest = [f for f in files if f == 'cluster-15-interconnection-requests.xlsx']
+                dated = [f for f in files if 'cluster-15' in f and f != 'cluster-15-interconnection-requests.xlsx']
+                assert len(latest) == 1, f"Expected latest copy, found: {files}"
+                assert len(dated) == 1, f"Expected dated file, found: {files}"
+        finally:
+            shutil.rmtree(temp_dir)
+
+    @patch('data_collection.requests.get')
+    def test_download_cluster15_skips_if_exists(self, mock_get):
+        """Test that download is skipped if today's file already exists."""
+        temp_dir = tempfile.mkdtemp()
+        try:
+            from datetime import datetime
+            date_suffix = datetime.now().strftime("-%m%d%Y")
+            existing = os.path.join(temp_dir, f"cluster-15-interconnection-requests{date_suffix}.xlsx")
+            with open(existing, 'wb') as f:
+                f.write(b'existing data')
+
+            with patch('data_collection.RAW_DIR', temp_dir):
+                from data_collection import download_cluster15_report
+                output_path = download_cluster15_report(force=False)
+                mock_get.assert_not_called()
+                assert output_path == existing
+        finally:
+            shutil.rmtree(temp_dir)

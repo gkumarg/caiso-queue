@@ -130,6 +130,24 @@ class TestRunPipeline:
         assert execution_order == ['download', 'parse', 'analyze']
 
     @patch('data_collection.download_queue_report')
+    @patch('data_collection.download_cluster15_report')
+    @patch('parse_queue.main')
+    @patch('parse_queue.ingest_cluster15')
+    @patch('analyze_queue.main')
+    def test_pipeline_calls_cluster15_steps(self, mock_analyze, mock_ingest, mock_parse, mock_dl15, mock_download):
+        """Test that run_pipeline calls Cluster 15 download and ingest."""
+        mock_download.return_value = 'raw/publicqueuereport.xlsx'
+        mock_dl15.return_value = 'raw/cluster-15-interconnection-requests.xlsx'
+        calls = []
+        mock_dl15.side_effect = lambda: calls.append('cluster15_download') or 'raw/cluster-15.xlsx'
+        mock_ingest.side_effect = lambda: calls.append('cluster15_ingest')
+
+        run_pipeline()
+
+        assert 'cluster15_download' in calls, "download_cluster15_report was not called"
+        assert 'cluster15_ingest' in calls, "ingest_cluster15 was not called"
+
+    @patch('data_collection.download_queue_report')
     @patch('parse_queue.main')
     @patch('analyze_queue.main')
     def test_run_pipeline_handles_different_exceptions(self, mock_analyze, mock_parse, mock_download):
