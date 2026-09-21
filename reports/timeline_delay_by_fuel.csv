@@ -1,5 +1,5 @@
 fuel_type,average_delay_days
-Battery,2247.906976744186
+Battery,2239.3012048192772
 Battery/Battery,3158.5
 Battery/Other,2587.0
 Battery/Solar,1803.0181818181818
@@ -11,7 +11,7 @@ Natural Gas,172.0
 Natural Gas/Battery,5751.0
 Pumped-Storage hydro,7305.0
 Solar,1732.4
-Solar/Battery,2522.3414634146343
+Solar/Battery,2524.5731707317073
 Water,4883.5
 Wind Turbine,1934.4
 Wind Turbine/Battery,5685.571428571428
